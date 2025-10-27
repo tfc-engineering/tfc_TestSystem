@@ -215,18 +215,18 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                     self.env_vars_ = yaml_dict[param]
 
         # Clean up executable
-        self.executable_ = self.executable_.strip()
-        if self.executable_.find("$") == 0:
-            original_exe = self.executable_
+        exe_printed_value = self.executable_.strip()
+        if exe_printed_value.find("$") == 0:
+            original_exe = exe_printed_value
             try:
                 env_var_value = os.environ[self.executable_[1:]]
-                self.executable_ += f" ({env_var_value})"
+                exe_printed_value += f" ({env_var_value})"
             except:
-                self.executable_ = original_exe
+                exe_printed_value = original_exe
 
         print("\n***** TFCTestSystem created *****")
 
-        print(f" Main executable        : {self.executable_}")
+        print(f" Main executable        : {exe_printed_value}")
         print(f" Number of jobs         : {self.num_jobs_}")
         print(f" Weight classes         : {self.weight_classes_allowed_}")
         print(f" Compiler               : {os.environ["COMPILER"]}")
