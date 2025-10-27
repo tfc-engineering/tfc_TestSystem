@@ -146,7 +146,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         project_root = params.getParam("project_root").getStringValue()
         if project_root == "":
-            self.project_root_ = os.getcwd() if project_root == "" else project_root
+            self.project_root_ = os.getcwd() + "/" if project_root == "" else project_root
 
         print("Project-root", self.project_root_)
 
@@ -188,7 +188,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         # Process the config file
         config_file_path = ""
-        possible_config_file_path1 = file_path + self.config_file_
+        possible_config_file_path1 = self.project_root_ + self.config_file_
         possible_config_file_path2 = file_path + "../" + self.config_file_
 
         if os.path.isfile(possible_config_file_path1):
