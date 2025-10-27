@@ -232,8 +232,6 @@ class TFCTestObject(TFCObject):
 
         # Make the output directory
         if not os.path.isdir(dir_+"/out"):
-            print(test_system.project_root_)
-            print(os.getcwd(), os.path.realpath(dir_), dir_)
             os.mkdir(dir_+"/out")
 
         self._process_ = subprocess.Popen(cmd,
