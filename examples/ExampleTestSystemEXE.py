@@ -11,7 +11,7 @@ cwd = os.getcwd()
 
 src_dir = script_path + "../"# <--- CHANGE THIS
 sys.path.append(src_dir)
-sys.path.append(src_dir + "tfc_PyFactory")
+sys.path.append(src_dir + "../")
 
 
 from tfc_PyFactory import *
