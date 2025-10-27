@@ -1,0 +1,3 @@
+default_executable: $TEST_EXE
+print_width: 80
+env_vars: ["COMPILER"]

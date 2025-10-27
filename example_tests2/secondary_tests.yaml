@@ -1,0 +1,15 @@
+basic_python2:
+  executable: "python"
+  args: "-c 'print(\"Hello world from python\")'"
+  checks: [{type: ExitCodeCheck}]
+basic_python1:
+  executable: "python"
+  args: "-c 'print(\"Hello world from python\")'"
+  requirements: ["inparams", "cli1"]
+  checks: [{type: ExitCodeCheck}]
+
+basic_python_fail:
+  executable: "python"
+  args: "-c 'exit(10)'"
+  requirements: ["inparams", "cli1"]
+  checks: [{type: ExitCodeCheck}]
