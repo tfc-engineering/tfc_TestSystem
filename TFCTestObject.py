@@ -157,6 +157,9 @@ class TFCTestObject(TFCObject):
         compiler_str = os.environ.get('COMPILER')
         output = output.replace("$TPF_LOC",
                                 self.project_root_+f'test/exe/{compiler_str}/')
+        # Special thing for windows
+        if compiler_str == 'windowsntl':
+            output = output.replace("\n", "&&")
 
         env_vars = self.test_system_reference_.env_vars_
 
@@ -241,7 +244,7 @@ class TFCTestObject(TFCObject):
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE,
                                         universal_newlines=True)
-
+        out, err = self._process_.communicate()
 
     def checkProgress(self, test_system) -> str:
         """Checks whether the process is running and returns 'Running' if it is.
