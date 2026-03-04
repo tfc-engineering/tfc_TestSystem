@@ -304,6 +304,7 @@ class TFCTestObject(TFCObject):
             test_config = dict(
                 test = self,
                 test_system = test_system,
+                output = out,
                 error_code = error_code,
                 out_file_name = out_file_name,
                 out_directory = dir_+"/out",
