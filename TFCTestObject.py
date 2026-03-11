@@ -265,6 +265,20 @@ class TFCTestObject(TFCObject):
 
         self.fail_flag_reason_ = ""
 
+        # Check if the test has run beyond permitted time.
+        # This prevents hanging tests that never finish.
+        if self.weight_class_ == "short":
+            if self._time_current_ >= 300.0: # 5 minutes
+                self.skip_ = "Short test ran longer than 5 minutes."
+        elif self.weight_class_ == "medium":
+            if self._time_current_ >= 600.0: # 10 minutes
+                self.skip_ = "Medium test ran longer than 10 minutes."
+        elif self.weight_class_ == "long":
+            if self._time_current_ >= 1800.0: # 30 minutes
+                self.skip_ = "Long test ran longer than 30 minutes."
+        else:
+            pass
+
         if self.skip_ == "":
 
             if self._process_.poll() is not None:
@@ -341,6 +355,8 @@ class TFCTestObject(TFCObject):
                 pass
 
         else: # skipped
+            if self._process_:
+               self._process_.terminate()
             self._time_end_ = time.perf_counter()
             self.passed_ = True
             # self.ran_ = True

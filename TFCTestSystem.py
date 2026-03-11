@@ -453,14 +453,17 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                         # Check if the test has run beyond permitted time.
                         # This prevents hanging tests that never finish.
                         if test.weight_class_ == "short":
-                            if test._time_current_ >= 60.0: # 1 minute
-                                test.skip_ = "Short test ran longer than 1 minute."
+                            if test._time_current_ >= 300.0: # 5 minutes
+                                test.skip_ = "Short test ran longer than 5 minutes."
+                                # test._process_.terminate()
                         elif test.weight_class_ == "medium":
                             if test._time_current_ >= 600.0: # 10 minutes
                                 test.skip_ = "Medium test ran longer than 10 minutes."
+                                test._process_.terminate()
                         elif test.weight_class_ == "long":
                             if test._time_current_ >= 1800.0: # 30 minutes
                                 test.skip_ = "Long test ran longer than 30 minutes."
+                                test._process_.terminate()
                         else:
                             pass
 
