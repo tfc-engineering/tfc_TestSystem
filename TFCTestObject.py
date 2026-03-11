@@ -244,7 +244,7 @@ class TFCTestObject(TFCObject):
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE,
                                         universal_newlines=True)
-        out, err = self._process_.communicate()
+
 
     def checkProgress(self, test_system) -> str:
         """Checks whether the process is running and returns 'Running' if it is.
