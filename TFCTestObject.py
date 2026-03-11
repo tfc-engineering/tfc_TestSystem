@@ -124,6 +124,7 @@ class TFCTestObject(TFCObject):
         self._process_ = None
         self._time_start_ = time.perf_counter()
         self._time_end_ = time.perf_counter()
+        self._time_current_ = 0.0
         self._command_ = ""
 
         self.check_inputs = params.getParam("checks")
@@ -179,8 +180,14 @@ class TFCTestObject(TFCObject):
                 last_dash = test_name.rfind("/")
                 test_true_name = test_name if last_dash < 0 else test_name[last_dash+1:]
 
-                if test_true_name == dep_name and not test.ran_:
-                    return False
+                if test_true_name == dep_name:
+                    if not test.ran_:
+                        return False
+                    # Check if the dependency was skipped
+                    if test.skip_ != "":
+                        if self.skip_ == "":
+                            self.skip_ = "Parent was skipped."
+
         return True
 
     def submit(self, test_system) -> None:
@@ -278,6 +285,8 @@ class TFCTestObject(TFCObject):
                 file.close()
                 # self.ran_ = True
             else:
+                # Set the current run time so we can check if the test is hanging
+                self._time_current_ = time.perf_counter() - self._time_start_
                 return "Running"
 
             if not self.precheck_script_ == "":
