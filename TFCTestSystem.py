@@ -482,7 +482,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             if not test.passed_:
                 num_tests_failed += 1
             if test.skip_:
-                num_tests_skipped += 1
+                if not test.passed_:
+                    num_tests_skipped += 1
 
         print()
         print("Elapsed time                       : {:.2f} seconds".format(elapsed_time))

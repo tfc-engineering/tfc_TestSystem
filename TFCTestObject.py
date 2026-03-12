@@ -141,6 +141,7 @@ class TFCTestObject(TFCObject):
         self.ran_: bool = False
         self.submitted_: bool = False
         self.passed_: bool = False
+        self.parent_failed_: bool = False
 
         self.test_result_annotation_ = ""
 
@@ -184,10 +185,8 @@ class TFCTestObject(TFCObject):
                     if not test.ran_:
                         return False
                     # Check if the dependency failed
-                    if test.fail_flag_ != "":
-                        if self.skip_ == "":
-                            self.skip_ = "Parent failed."
-
+                    if test.passed_ == False:
+                        self.parent_failed_ = True
         return True
 
     def submit(self, test_system) -> None:
@@ -196,7 +195,7 @@ class TFCTestObject(TFCObject):
 
         dir_, filename_ = os.path.split(self.name_)
 
-        if self.skip_ != "":
+        if self.skip_ != "" or self.parent_failed_ == True:
 
             return
 
@@ -258,13 +257,13 @@ class TFCTestObject(TFCObject):
 
         suffix = ""
         for annotation in annotations:
-            if self.fail_flag_ != "":
+            if self.fail_flag_ != "" or self.parent_failed_:
                 suffix += "  \033[35m[" + annotation + "]\033[0m"
             else:
                 suffix += "  \033[36m[" + annotation + "]\033[0m"
             cntl_char_pad += 5 + 4
         suffix += "  \033[32mPassed\033[0m" if self.passed_ else (
-            "  \033[35mFailed\033[0m" if self.fail_flag_ != "" else
+            "  \033[35mFailed\033[0m" if self.fail_flag_ != "" or self.parent_failed_ else
             "  \033[31mFailed\033[0m")
 
         self.test_result_annotation_ = ""
@@ -306,6 +305,19 @@ class TFCTestObject(TFCObject):
 
         if self.skip_ == "":
 
+            if self.parent_failed_ == True:
+                self.fail_flag_reason_ = "Parent failed."
+                annotations.append(f"Note: {self.fail_flag_reason_}")
+                # self._process_.terminate()
+                message, cntl_char_pad = (
+                self.messageResult(test_system.max_num_procs_,
+                                   test_system.print_width_,
+                                   annotations,
+                                   cntl_char_pad))
+                print(message)
+                self.ran_ = True
+                return "Done"
+
             if self._process_.poll() is not None:
 
                 out, err = self._process_.communicate()
@@ -324,6 +336,7 @@ class TFCTestObject(TFCObject):
                 file.close()
 
             else:
+
                 # Set the current run time so we can check if the test is hanging
                 self._time_current_ = time.perf_counter() - self._time_start_
 
