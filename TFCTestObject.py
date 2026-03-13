@@ -142,6 +142,7 @@ class TFCTestObject(TFCObject):
         self.submitted_: bool = False
         self.passed_: bool = False
         self.parent_failed_: bool = False
+        self.time_limit_: bool = False
 
         self.test_result_annotation_ = ""
 
@@ -185,8 +186,10 @@ class TFCTestObject(TFCObject):
                     if not test.ran_:
                         return False
                     # Check if the dependency failed
-                    if test.passed_ == False:
+                    if test.time_limit_ == True:
                         self.parent_failed_ = True
+                        self.fail_flag_ = test.name_.rsplit("/", 1)[-1]
+
         return True
 
     def submit(self, test_system) -> None:
@@ -306,9 +309,8 @@ class TFCTestObject(TFCObject):
         if self.skip_ == "":
 
             if self.parent_failed_ == True:
-                self.fail_flag_reason_ = "Parent failed."
+                self.fail_flag_reason_ = f'Parent "{self.fail_flag_}" failed.'
                 annotations.append(f"Note: {self.fail_flag_reason_}")
-                # self._process_.terminate()
                 message, cntl_char_pad = (
                 self.messageResult(test_system.max_num_procs_,
                                    test_system.print_width_,
@@ -346,6 +348,7 @@ class TFCTestObject(TFCObject):
                     for weight, time_limit in weight_name.items():
                         if self.weight_class_ == weight:
                             if self._time_current_ >= time_limit:
+                                self.time_limit_ = True
                                 self.fail_flag_ = (
                                 f'Weight "{self.weight_class_}" test time of '
                                 f'{self._time_current_:.1f}s >= time limit of {time_limit}s.')

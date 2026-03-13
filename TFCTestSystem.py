@@ -161,7 +161,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.print_width_ = 120
         self.default_args_ = ""
         self.env_vars_ = []
-        self.default_weight_ = "short"
+        self.default_weight_ = ""
         self.weight_map_ = ""
 
         with open(config_file_path) as yaml_file:
@@ -183,8 +183,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         if self.weight_map_ == "":
             self.weight_map_ = [{"short": 2.0}, {"intermediate": 10.0}, {"long": 20.0}]
-            self.default_weight_ = "short"
-        else:
+
+        if self.default_weight_ != "":
             found_weight = False
             for weight_name in self.weight_map_:
                 for weight in weight_name.keys():
@@ -193,11 +193,19 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                         break
             if found_weight == False:
                 print(f'\033[31mWARNING: default_weight set in config file {self.config_file_} ' +
-                      f'but not found in default weight_map. Falling back to default_weight = "short"\033[0m')
-                self.weight_map_ = [{"short": 2.0}, {"intermediate": 10.0}, {"long": 20.0}]
-                self.default_weight_ = "short"
+                      f'but not found in weight_map. Ignoring default_weight.\033[0m')
+                self.default_weight_ = ""
+
+        if "all" in self.weights_:
+            self.weights_ = [weight for weight_map in self.weight_map_ for weight in weight_map.keys()]
 
         self.weight_classes_allowed_ = self.weights_
+
+        # Append "None" weight class to weight_classes_allowed
+        # This makes the test system agnostic to the weight class definitions
+        # and allows tests to run that have no assignment without explicity
+        # assigning them to an arbitrary member of the weight classes
+        self.weight_classes_allowed_.append(None)
 
         self.max_num_procs_ = 1
 
@@ -236,7 +244,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         print(f" Main executable        : {exe_printed_value}")
         print(f" Number of jobs         : {self.num_jobs_}")
         print(f" Weight classes         : {self.weight_classes_allowed_}")
-        print(f" Default weight class   : {self.default_weight_}")
+        if self.default_weight_ != "":
+            print(f" Default weight class   : {self.default_weight_}")
         print(f" Compiler env-var       : {self.compiler_}")
         print(f" System details         : {self.os_details_}")
         print(f" System version         : {self.os_version_}")
@@ -345,8 +354,6 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
                     # check if weight class is allowed
                     if 'weight_class' not in temp_dict:
-                        temp_dict['weight_class'] = self.default_weight_
-                        if self.default_weight_ not in self.weight_classes_allowed_:
                             continue
                     else:
                         if temp_dict['weight_class'] not in self.weight_classes_allowed_:
@@ -367,6 +374,12 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             # make tests
             for test_name in new_yaml_dict:
                 temp_dict = new_yaml_dict[test_name]
+
+                if 'weight_class' not in temp_dict:
+                    if self.default_weight_ != "":
+                        temp_dict['weight_class'] = self.default_weight_
+                    else:
+                        temp_dict['weight_class'] = None
 
                 if not isinstance(temp_dict, dict):
                     print(f"\033[31mWARNING: Error test \"{test_name}\" is not a dict\033[0m")
