@@ -51,8 +51,8 @@ class TFCTestObject(TFCObject):
                                 "via mpi.")
         params.addOptionalParam("num_procs", 1,
                                 "The number of mpi processes used.")
-        params.addOptionalParam("weight_class", "short",
-                                "The weight class short/intermediate/long")
+        params.addOptionalParam("weight_class", "",
+                                "The weight class")
         params.addOptionalParam("outfileprefix", "",
                                 'Will default to the test name + .out, '
                                 'otherwise outfileprefix+.out.')
@@ -124,6 +124,7 @@ class TFCTestObject(TFCObject):
         self._process_ = None
         self._time_start_ = time.perf_counter()
         self._time_end_ = time.perf_counter()
+        self._time_current_ = 0.0
         self._command_ = ""
 
         self.check_inputs = params.getParam("checks")
@@ -140,6 +141,8 @@ class TFCTestObject(TFCObject):
         self.ran_: bool = False
         self.submitted_: bool = False
         self.passed_: bool = False
+        self.parent_failed_: bool = False
+        self.time_limit_: bool = False
 
         self.test_result_annotation_ = ""
 
@@ -182,8 +185,14 @@ class TFCTestObject(TFCObject):
                 last_dash = test_name.rfind("/")
                 test_true_name = test_name if last_dash < 0 else test_name[last_dash+1:]
 
-                if test_true_name == dep_name and not test.ran_:
-                    return False
+                if test_true_name == dep_name:
+                    if not test.ran_:
+                        return False
+                    # Check if the dependency failed
+                    if test.time_limit_ == True:
+                        self.parent_failed_ = True
+                        self.fail_flag_ = test.name_.rsplit("/", 1)[-1]
+
         return True
 
     def submit(self, test_system) -> None:
@@ -192,7 +201,7 @@ class TFCTestObject(TFCObject):
 
         dir_, filename_ = os.path.split(self.name_)
 
-        if self.skip_ != "":
+        if self.skip_ != "" or self.parent_failed_ == True:
 
             return
 
@@ -246,6 +255,45 @@ class TFCTestObject(TFCObject):
                                         universal_newlines=True)
 
 
+    def messageResult(self, max_num_procs, print_width, annotations, cntl_char_pad) -> tuple:
+        pcount_width = int(math.floor(math.log10(max_num_procs)))+1
+
+        prefix = f"\033[33m[{self.num_procs_:{pcount_width}d}]\033[0m  "
+        cntl_char_pad += 5 + 4
+
+        suffix = ""
+        for annotation in annotations:
+            if self.fail_flag_ != "" or self.parent_failed_:
+                suffix += "  \033[35m[" + annotation + "]\033[0m"
+            else:
+                suffix += "  \033[36m[" + annotation + "]\033[0m"
+            cntl_char_pad += 5 + 4
+        suffix += "  \033[32mPassed\033[0m" if self.passed_ else (
+            "  \033[35mFailed\033[0m" if self.fail_flag_ != "" or self.parent_failed_ else
+            "  \033[31mFailed\033[0m")
+
+        self.test_result_annotation_ = ""
+        for annotation in annotations:
+            self.test_result_annotation_ += f"[{annotation}]"
+
+        cntl_char_pad += 5 + 4
+
+        # pretty_name = os.path.relpath(self.name_, PROJECT_ROOT_PATH)
+        pretty_name = self.name_ # experimental
+
+        time_taken = self._time_end_ - self._time_start_
+
+        width = print_width - len(prefix) - len(pretty_name) \
+              - len(suffix) + cntl_char_pad
+        width = max(width, 0)
+
+        suffix = '  ' + '.' * width + suffix + f" {time_taken:.1g}s"
+
+        message = prefix + pretty_name + suffix
+
+        return message, cntl_char_pad
+
+
     def checkProgress(self, test_system) -> str:
         """Checks whether the process is running and returns 'Running' if it is.
         If it is not running anymore the checks will be executed."""
@@ -263,6 +311,18 @@ class TFCTestObject(TFCObject):
 
         if self.skip_ == "":
 
+            if self.parent_failed_ == True:
+                self.fail_flag_reason_ = f'Parent "{self.fail_flag_}" failed.'
+                annotations.append(f"Note: {self.fail_flag_reason_}")
+                message, cntl_char_pad = (
+                self.messageResult(test_system.max_num_procs_,
+                                   test_system.print_width_,
+                                   annotations,
+                                   cntl_char_pad))
+                print(message)
+                self.ran_ = True
+                return "Done"
+
             if self._process_.poll() is not None:
 
                 out, err = self._process_.communicate()
@@ -279,8 +339,35 @@ class TFCTestObject(TFCObject):
                 file.write(out + "\n")
                 file.write(err + "\n")
                 file.close()
-                # self.ran_ = True
+
             else:
+
+                # Set the current run time so we can check if the test is hanging
+                self._time_current_ = time.perf_counter() - self._time_start_
+
+                # Check if the test has run beyond permitted time.
+                # This prevents hanging tests that never finish.
+                for weight_name in test_system.weight_map_:
+                    for weight, time_limit in weight_name.items():
+                        if self.weight_class_ == weight:
+                            if self._time_current_ >= time_limit:
+                                self.time_limit_ = True
+                                self.fail_flag_ = (
+                                f'Weight "{self.weight_class_}" test time of '
+                                f'{self._time_current_:.1f}s >= time limit of {time_limit}s.')
+                                annotations.append(f"Note: {self.fail_flag_}")
+                                self.fail_flag_reason_ = f"Fail flag: {self.fail_flag_}"
+                                self._process_.terminate()
+                                self._time_end_ = time.perf_counter()
+                                message, cntl_char_pad = (
+                                self.messageResult(test_system.max_num_procs_,
+                                                   test_system.print_width_,
+                                                   annotations,
+                                                   cntl_char_pad))
+                                print(message)
+                                self.ran_ = True
+                                return "Done"
+
                 return "Running"
 
             if not self.precheck_script_ == "":
@@ -337,49 +424,13 @@ class TFCTestObject(TFCObject):
         else: # skipped
             self._time_end_ = time.perf_counter()
             self.passed_ = True
-            # self.ran_ = True
             annotations.append( f"Skipped: {self.skip_}" )
 
-        max_num_procs = test_system.max_num_procs_
-        pcount_width = int(math.floor(math.log10(max_num_procs)))+1
-
-        prefix = f"\033[33m[{self.num_procs_:{pcount_width}d}]\033[0m  "
-        cntl_char_pad += 5 + 4
-
-        suffix = ""
-        for annotation in annotations:
-            if self.fail_flag_ != "":
-                suffix += "  \033[35m[" + annotation + "]\033[0m"
-            else:
-                suffix += "  \033[36m[" + annotation + "]\033[0m"
-            cntl_char_pad += 5 + 4
-        suffix += "  \033[32mPassed\033[0m" if self.passed_ else (
-            "  \033[35mFailed\033[0m" if self.fail_flag_ != "" else
-            "  \033[31mFailed\033[0m")
-
-        self.test_result_annotation_ = ""
-        for annotation in annotations:
-            self.test_result_annotation_ += f"[{annotation}]"
-
-
-        cntl_char_pad += 5 + 4
-
-        # pretty_name = os.path.relpath(self.name_, PROJECT_ROOT_PATH)
-        pretty_name = self.name_ # experimental
-
-        time_taken = self._time_end_ - self._time_start_
-
-        width = test_system.print_width_ - len(prefix) - len(pretty_name) \
-              - len(suffix) + cntl_char_pad
-        width = max(width, 0)
-
-        suffix = '  ' + '.' * width + suffix + f" {time_taken:.1g}s"
-
-        message = prefix + pretty_name + suffix
-
+        message, cntl_char_pad = self.messageResult(test_system.max_num_procs_,
+                                                    test_system.print_width_,
+                                                    annotations,
+                                                    cntl_char_pad)
         print(message)
-
-        # if not os.path.exists():
 
         if self.skip_ == "":
             if not self.postrun_script_ == "":
