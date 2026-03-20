@@ -16,6 +16,7 @@ class TFCTestResultsDatabase:
             test_data["requirements"] = test_object.requirements_
             test_data["passed"] = test_object.passed_
             test_data["annotations"] = test_object.test_result_annotation_
+            test_data["test_doc_page"] = test_object.test_doc_page_
 
             database.append(test_data)
 

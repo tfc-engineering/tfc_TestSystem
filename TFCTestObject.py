@@ -87,6 +87,8 @@ class TFCTestObject(TFCObject):
         params.addOptionalParam("requirements", [],
                                 "An array of strings representing id_tags for requirements "
                                 "that are addressed by this test.")
+        params.addOptionalParam("test_doc_page", "",
+                                "A link to a documentation page for this test.")
 
         return params
 
@@ -117,6 +119,8 @@ class TFCTestObject(TFCObject):
         requirements_param = params.getParam("requirements")
         for sub_param in requirements_param:
             self.requirements_.append(sub_param.getStringValue())
+
+        self.test_doc_page_ = params.getParam("test_doc_page").getStringValue()
 
         self.test_system_reference_ = None
 

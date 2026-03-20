@@ -229,11 +229,14 @@ class TFCTraceabilityMatrix:
         #======================================== Determine test integrity
         # First build a list of registered requirements
         reqistered_requirements = []
+        requirements_without_tests = []
         for req_block in req_blocks:
             for topic_tag,topic_block in req_block["topics"].items():
                 for req_tag, req_string in topic_block.requirement_strings.items():
                     topic_req_tag = f'{topic_tag}.{req_tag}'
                     reqistered_requirements.append(topic_req_tag)
+                    if not topic_req_tag in requirements_to_test_mapping:
+                        requirements_without_tests.append(topic_req_tag)
 
         # Now check each test
         invalid_tests = {}
@@ -263,6 +266,13 @@ class TFCTraceabilityMatrix:
 
                 integrity += "\n"
 
+        if len(requirements_without_tests) == 0:
+            integrity += "\nThere are no untested requirements."
+        else:
+            integrity += f'\nNumber of requirement that have no associated ' + \
+                         f'test = {len(requirements_without_tests)}:\n\n'
+            for topic_req_tag in requirements_without_tests:
+                integrity += "- " + coloredText("red", topic_req_tag) + '\n'
         rtmfile.write(integrity)
         rtmfile.write("\n\n")
 
