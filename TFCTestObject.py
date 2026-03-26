@@ -342,28 +342,30 @@ class TFCTestObject(TFCObject):
                 # Set the current run time so we can check if the test is hanging
                 self._time_current_ = time.perf_counter() - self._time_start_
 
-                # Check if the test has run beyond permitted time.
-                # This prevents hanging tests that never finish.
-                for weight_name in test_system.weight_map_:
-                    for weight, time_limit in weight_name.items():
-                        if self.weight_class_ == weight:
-                            if self._time_current_ >= time_limit:
-                                self.time_limit_ = True
-                                self.fail_flag_ = (
-                                f'Weight "{self.weight_class_}" test time of '
-                                f'{self._time_current_:.1f}s >= time limit of {time_limit}s.')
-                                annotations.append(f"Note: {self.fail_flag_}")
-                                self.fail_flag_reason_ = f"Fail flag: {self.fail_flag_}"
-                                self._process_.terminate()
-                                self._time_end_ = time.perf_counter()
-                                message, cntl_char_pad = (
-                                self.messageResult(test_system.max_num_procs_,
-                                                   test_system.print_width_,
-                                                   annotations,
-                                                   cntl_char_pad))
-                                print(message)
-                                self.ran_ = True
-                                return "Done"
+                # If time limits are being enforced
+                if not test_system.no_time_limit_:
+                    # Check if the test has run beyond permitted time.
+                    # This prevents hanging tests that never finish.
+                    for weight_name in test_system.weight_map_:
+                        for weight, time_limit in weight_name.items():
+                            if self.weight_class_ == weight:
+                                if self._time_current_ >= time_limit:
+                                    self.time_limit_ = True
+                                    self.fail_flag_ = (
+                                    f'"{self.weight_class_}" weight test '
+                                    f'exceeded time limit of {time_limit}s.')
+                                    annotations.append(f"Note: {self.fail_flag_}")
+                                    self.fail_flag_reason_ = f"Fail flag: {self.fail_flag_}"
+                                    self._process_.terminate()
+                                    self._time_end_ = time.perf_counter()
+                                    message, cntl_char_pad = (
+                                    self.messageResult(test_system.max_num_procs_,
+                                                       test_system.print_width_,
+                                                       annotations,
+                                                       cntl_char_pad))
+                                    print(message)
+                                    self.ran_ = True
+                                    return "Done"
 
                 return "Running"
 

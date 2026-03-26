@@ -14,6 +14,7 @@ from TFCTestObject import *
 from TFCTraceabilityMatrix import *
 from TFCTestResultsDatabase import *
 
+import shutil
 import os
 import yaml
 import re
@@ -61,6 +62,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         params.addOptionalParam("weights", ["all"],
                                 "Weight classes to execute. "
                                 "Defaults to all.")
+        params.addOptionalParam("no_time_limit", False,
+                                "Don't enforce weight class time limits. "
+                                "Defaults to False.")
         params.addOptionalParam("config_file", "TestSystemCONFIG.yaml",
                                 "The name of the default config file")
         params.addOptionalParam("exclude_folders", [],
@@ -89,6 +93,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.weights_ = []
         for subparam in weights:
             self.weights_.append(subparam.getStringValue())
+
+        self.no_time_limit_ = params.getParam("no_time_limit").getBooleanValue()
 
         self.config_file_ = params.getParam("config_file").getStringValue()
         self.compiler_ = os.getenv("COMPILER")
@@ -158,7 +164,12 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             self.num_init_warnings_ += 1
 
         # Config file options
-        self.print_width_ = 120
+        try:
+            size = shutil.get_terminal_size()
+            width = size.columns
+            self.print_width_ = width - 10
+        except:
+            self.print_width_ = 120
         self.default_args_ = ""
         self.env_vars_ = []
         self.default_weight_ = ""
@@ -201,11 +212,11 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         self.weight_classes_allowed_ = self.weights_
 
-        # Append "None" weight class to weight_classes_allowed
+        # Append "none" weight class to weight_classes_allowed
         # This makes the test system agnostic to the weight class definitions
         # and allows tests to run that have no assignment without explicity
         # assigning them to an arbitrary member of the weight classes
-        self.weight_classes_allowed_.append(None)
+        self.weight_classes_allowed_.append("none")
 
         self.max_num_procs_ = 1
 
@@ -379,7 +390,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                     if self.default_weight_ != "":
                         temp_dict['weight_class'] = self.default_weight_
                     else:
-                        temp_dict['weight_class'] = None
+                        temp_dict['weight_class'] = "none"
 
                 if not isinstance(temp_dict, dict):
                     print(f"\033[31mWARNING: Error test \"{test_name}\" is not a dict\033[0m")
