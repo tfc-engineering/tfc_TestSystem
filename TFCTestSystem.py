@@ -96,6 +96,10 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         self.no_time_limit_ = params.getParam("no_time_limit").getBooleanValue()
 
+        # This is an absolute value that gets populated with a non-zero value by the performance unit test.
+        # Case specific performance tests are benchmarked against a ratio relative to this.
+        self.execution_time_ = 0.0
+
         self.config_file_ = params.getParam("config_file").getStringValue()
         self.compiler_ = os.getenv("COMPILER")
         self.os_version_ = platform.version()

@@ -141,7 +141,7 @@ class TFCTestObject(TFCObject):
         self.ran_: bool = False
         self.submitted_: bool = False
         self.passed_: bool = False
-        self.parent_failed_: bool = False
+        self.dependency_failed_: bool = False
         self.time_limit_: bool = False
 
         self.test_result_annotation_ = ""
@@ -175,20 +175,31 @@ class TFCTestObject(TFCObject):
         """Determines, from the supplied tests-list, whether this
         test's dependendent tests have run.
         """
+        try:
+           if str(*self.dependencies_.sub_params) == '""':
+               return True
+        except:
+           pass
+
         for dependency in self.dependencies_:
             dep_name = dependency.getStringValue()
+            dep_found = False
             for test in tests:
                 test_name = test.name_
                 last_dash = test_name.rfind("/")
                 test_true_name = test_name if last_dash < 0 else test_name[last_dash+1:]
 
                 if test_true_name == dep_name:
+                    dep_found = True
                     if not test.ran_:
                         return False
                     # Check if the dependency failed
                     if test.time_limit_ == True:
-                        self.parent_failed_ = True
+                        self.dependency_failed_ = True
                         self.fail_flag_ = test.name_.rsplit("/", 1)[-1]
+
+            if dep_found == False: # this test's depencency is not an active test
+                self.skip_ = "Dependency not active."
 
         return True
 
@@ -198,7 +209,7 @@ class TFCTestObject(TFCObject):
 
         dir_, filename_ = os.path.split(self.name_)
 
-        if self.skip_ != "" or self.parent_failed_ == True:
+        if self.skip_ != "" or self.dependency_failed_ == True:
 
             return
 
@@ -260,13 +271,13 @@ class TFCTestObject(TFCObject):
 
         suffix = ""
         for annotation in annotations:
-            if self.fail_flag_ != "" or self.parent_failed_:
+            if self.fail_flag_ != "" or self.dependency_failed_:
                 suffix += "  \033[35m[" + annotation + "]\033[0m"
             else:
                 suffix += "  \033[36m[" + annotation + "]\033[0m"
             cntl_char_pad += 5 + 4
         suffix += "  \033[32mPassed\033[0m" if self.passed_ else (
-            "  \033[35mFailed\033[0m" if self.fail_flag_ != "" or self.parent_failed_ else
+            "  \033[35mFailed\033[0m" if self.fail_flag_ != "" or self.dependency_failed_ else
             "  \033[31mFailed\033[0m")
 
         self.test_result_annotation_ = ""
@@ -308,8 +319,8 @@ class TFCTestObject(TFCObject):
 
         if self.skip_ == "":
 
-            if self.parent_failed_ == True:
-                self.fail_flag_reason_ = f'Parent "{self.fail_flag_}" failed.'
+            if self.dependency_failed_ == True:
+                self.fail_flag_reason_ = f'Dependency "{self.fail_flag_}" failed.'
                 annotations.append(f"Note: {self.fail_flag_reason_}")
                 message, cntl_char_pad = (
                 self.messageResult(test_system.max_num_procs_,
