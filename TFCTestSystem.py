@@ -14,6 +14,7 @@ from TFCTestObject import *
 from TFCTraceabilityMatrix import *
 from TFCTestResultsDatabase import *
 
+import shutil
 import os
 import yaml
 import re
@@ -56,19 +57,19 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         params.addOptionalParam("project_root", "",
                                 "Root of the project. If not supplied will revert to " \
                                 "current working directoy.")
-
         params.addOptionalParam("num_jobs", int(4),
                                 "The number of jobs that may run at the same time.")
-        params.addOptionalParam("weights", int(1),
-                                "Weight classes to allow. "
-                                "0=None, "
-                                "1=Short, "
-                                "2=Intermediate, "
-                                "3=Short+Intermediate, "
-                                "4=Long, "
-                                "5=Long+Short, "
-                                "6=Long+Intermediate, "
-                                "7=All")
+        params.addOptionalParam("weights", ["all"],
+                                'Weight classes to execute. '
+                                'Defaults to ["all"]. The classes allowed '
+                                'depends on whether a custom weight map has '
+                                'been assigned in the test system config file. '
+                                'If no custom weight map is assigned then the '
+                                'weight classes will be short, intermediate, or '
+                                'long, or all.')
+        params.addOptionalParam("no_time_limit", False,
+                                "Don't enforce weight class time limits. "
+                                "Defaults to False.")
         params.addOptionalParam("config_file", "TestSystemCONFIG.yaml",
                                 "The name of the default config file")
         params.addOptionalParam("exclude_folders", [],
@@ -80,6 +81,11 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                 "traceability matrix.")
         params.addOptionalParam("test_results_database_outputfile", "TestResults.yaml",
                                 "File to which the results database is to be written.")
+        params.addOptionalParam("generate_requirements_matrix", False,
+                                "Generate requirements traceability matrix.")
+        params.addOptionalParam("generate_results_database", False,
+                                "Generate results database.")
+
 
         return params
 
@@ -92,7 +98,18 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.directory_ = params.getParam("directory").getStringValue()
         self.executable_ = params.getParam("executable").getStringValue() # AFCF
         self.num_jobs_ = params.getParam("num_jobs").getIntegerValue()
-        self.weights_ = params.getParam("weights").getIntegerValue()
+
+        weights = params.getParam("weights")
+        self.weights_ = []
+        for subparam in weights:
+            self.weights_.append(subparam.getStringValue())
+
+        self.no_time_limit_ = params.getParam("no_time_limit").getBooleanValue()
+
+        # This is an absolute value that gets populated with a non-zero value by the performance unit test.
+        # Case specific performance tests are benchmarked against a ratio relative to this.
+        self.execution_time_ = 0.0
+
         self.config_file_ = params.getParam("config_file").getStringValue()
         self.compiler_ = os.getenv("COMPILER")
         self.os_version_ = platform.version()
@@ -105,6 +122,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             self.exclude_folders_.append(subparam.getStringValue())
 
         # Requirement Documents
+        self.generate_requirements_matrix_ = params.getParam("generate_requirements_matrix").getBooleanValue()
+
         requirement_docs = params.getParam("requirement_docs")
         self.requirement_docs_ = []
         for subparam in requirement_docs:
@@ -136,13 +155,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.requirements_matrix_outputfile_ = \
             params.getParam("requirements_matrix_outputfile").getStringValue()
 
+        self.generate_results_database_ = params.getParam("generate_results_database").getBooleanValue()
         self.test_results_database_outputfile_ = \
             params.getParam("test_results_database_outputfile").getStringValue()
-
-        # Config file options
-        self.print_width_ = 120
-        self.default_args_ = ""
-        self.env_vars_ = []
 
         project_root = params.getParam("project_root").getStringValue()
         if project_root == "":
@@ -150,25 +165,107 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         print("Project-root", self.project_root_)
 
-        # Init weight map
-        weight_class_map = ["long", "intermediate", "short"]
-        weight_classes_allowed = []
-        if 0 <= self.weights_ <= 7:
-            binary_weights = '{0:03b}'.format(self.weights_)
-            for k in range(0, 3):
-                if binary_weights[k] == '1':
-                    weight_classes_allowed.append(weight_class_map[k])
-        else:
-            raise RuntimeError(
-                '\033[31mIllegal value "' + str(self.weights_) + '" supplied ' +
-                'for argument -w, --weights\033[0m')
+        # Process the config file
+        self.num_init_warnings_ = 0
+        config_file_path = ""
+        possible_config_file_path1 = self.project_root_ + self.config_file_
+        possible_config_file_path2 = file_path + "../" + self.config_file_
 
-        self.weight_classes_allowed_ = weight_classes_allowed
+        if os.path.isfile(possible_config_file_path1):
+            config_file_path = possible_config_file_path1
+        elif os.path.isfile(possible_config_file_path2):
+            config_file_path = possible_config_file_path2
+        else:
+            print(f'\033[31mWARNING: No config file {self.config_file_} ' +
+                  f' found at either {possible_config_file_path1} or '
+                  f' {possible_config_file_path2}\033[0m')
+            self.num_init_warnings_ += 1
+
+        # Config file options
+        try:
+            size = shutil.get_terminal_size()
+            width = size.columns
+            self.print_width_ = width - 10
+        except:
+            self.print_width_ = 120
+        self.default_args_ = ""
+        self.env_vars_ = []
+        self.default_weight_ = ""
+        self.weight_map_ = ""
+
+        with open(config_file_path) as yaml_file:
+            yaml_dict = yaml.safe_load(yaml_file)
+
+            for param in yaml_dict:
+                if param == "default_executable":
+                    self.executable_ = yaml_dict[param]
+                if param == "print_width":
+                    self.print_width_ = yaml_dict[param]
+                if param == "default_args":
+                    self.default_args_ = yaml_dict[param]
+                if param == "env_vars":
+                    self.env_vars_ = yaml_dict[param]
+                if param == "weight_map":
+                    self.weight_map_ = yaml_dict[param]
+                if param == "default_weight":
+                    self.default_weight_ = yaml_dict[param]
+
+                if param == "requirement_docs":
+                    requirement_docs = yaml_dict[param]
+                    self.requirement_docs_ = []
+                    for subparam in requirement_docs:
+                        self.requirement_docs_.append(subparam)
+
+                    if len(self.requirement_docs_) > 0:
+                        print("Requirement docs:")
+                        for req_doc in self.requirement_docs_:
+                            existence_status = "" if os.path.isfile(req_doc) else " (not found)"
+                            print(f"  {req_doc}" + existence_status)
+
+                    self.requirement_blocks_ = []
+                    for req_doc in self.requirement_docs_:
+                        if not os.path.isfile(req_doc):
+                            continue
+
+                        doc_reqs = self.parseRequirementDocument(req_doc)
+
+                        self.requirement_blocks_.append(doc_reqs)
+
+                if param == "requirements_output":
+                    self.requirements_matrix_outputfile_ = yaml_dict[param]
+                if param == "results_output":
+                    self.test_results_database_outputfile_= yaml_dict[param]
+
+        if self.weight_map_ == "":
+            self.weight_map_ = {"short": 2.0, "intermediate": 10.0, "long": 20.0}
+
+        if self.default_weight_ != "":
+            if self.default_weight_ not in self.weight_map_:
+                print(f'\033[31mWARNING: default_weight set in config file {self.config_file_} ' +
+                      f'but not found in weight_map. Ignoring default_weight.\033[0m')
+                self.default_weight_ = ""
+
+        if "all" in self.weights_:
+            self.weights_ = list(self.weight_map_.keys())
+
+        # check if we have unrecognized weights
+        for weight in self.weights_:
+            if weight not in self.weight_map_:
+                print(f'\033[31mWARNING: weight "{weight}" is not in weight_map. '
+                      f'Falling back to "all".\033[0m')
+                self.weights_ = list(self.weight_map_.keys())
+
+        self.weight_classes_allowed_ = self.weights_
+
+        # Append "none" weight class to weight_classes_allowed
+        # This makes the test system agnostic to the weight class definitions
+        # and allows tests to run that have no assignment without explicity
+        # assigning them to an arbitrary member of the weight classes
+        self.weight_classes_allowed_.append("none")
+
         self.max_num_procs_ = 1
 
         self.tests_: list[TFCTestObject] = []
-
-        self.num_init_warnings_ = 0
 
         directories = []
         if self.directory_.find(",") < 0:
@@ -186,34 +283,6 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         for test in self.tests_:
             self.max_num_procs_ = max(self.max_num_procs_, test.num_procs_)
 
-        # Process the config file
-        config_file_path = ""
-        possible_config_file_path1 = self.project_root_ + self.config_file_
-        possible_config_file_path2 = file_path + "../" + self.config_file_
-
-        if os.path.isfile(possible_config_file_path1):
-            config_file_path = possible_config_file_path1
-        elif os.path.isfile(possible_config_file_path2):
-            config_file_path = possible_config_file_path2
-        else:
-            print(f'\033[31mWARNING: No config file {self.config_file_} ' +
-                  f' found at either {possible_config_file_path1} or '
-                  f' {possible_config_file_path2}\033[0m')
-            self.num_init_warnings_ += 1
-
-        with open(config_file_path) as yaml_file:
-            yaml_dict = yaml.safe_load(yaml_file)
-
-            for param in yaml_dict:
-                if param == "default_executable":
-                    self.executable_ = yaml_dict[param]
-                if param == "print_width":
-                    self.print_width_ = yaml_dict[param]
-                if param == "default_args":
-                    self.default_args_ = yaml_dict[param]
-                if param == "env_vars":
-                    self.env_vars_ = yaml_dict[param]
-
         # Clean up executable
         exe_printed_value = self.executable_.strip()
         if exe_printed_value.find("$") == 0:
@@ -226,13 +295,15 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         print("\n***** TFCTestSystem created *****")
 
-        print(f" Main executable        : {exe_printed_value}")
-        print(f" Number of jobs         : {self.num_jobs_}")
-        print(f" Weight classes         : {self.weight_classes_allowed_}")
-        print(f" Compiler env-var       : {self.compiler_}")
-        print(f" System details         : {self.os_details_}")
-        print(f" System version         : {self.os_version_}")
-        print(f" System release         : {self.os_release_}")
+        print(f" Main executable          : {exe_printed_value}")
+        print(f" Number of jobs           : {self.num_jobs_}")
+        print(f" Weight map               : {self.weight_classes_allowed_}")
+        print(f" Weight class time limits : {self.weight_map_}")
+        print(f" Default weight class     : {self.default_weight_}")
+        print(f" Compiler env-var         : {self.compiler_}")
+        print(f" System details           : {self.os_details_}")
+        print(f" System version           : {self.os_version_}")
+        print(f" System release           : {self.os_release_}")
         print(f" ")
 
 
@@ -337,7 +408,6 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
                     # check if weight class is allowed
                     if 'weight_class' not in temp_dict:
-                        if 'short' not in self.weight_classes_allowed_:
                             continue
                     else:
                         if temp_dict['weight_class'] not in self.weight_classes_allowed_:
@@ -358,6 +428,12 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             # make tests
             for test_name in new_yaml_dict:
                 temp_dict = new_yaml_dict[test_name]
+
+                if 'weight_class' not in temp_dict:
+                    if self.default_weight_ != "":
+                        temp_dict['weight_class'] = self.default_weight_
+                    else:
+                        temp_dict['weight_class'] = "none"
 
                 if not isinstance(temp_dict, dict):
                     print(f"\033[31mWARNING: Error test \"{test_name}\" is not a dict\033[0m")
@@ -424,7 +500,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         active_tests: list[TFCTestObject] = []
 
         # ======================================= Testing phase
-        print("\nRunning tests " + self.weight_classes_allowed_.__str__() + "")
+        print("\nRunning tests with weight class:" + self.weight_classes_allowed_.__str__() + "")
         k = 0
         while True:
             k += 1
@@ -464,7 +540,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
 
-        print("Done executing tests with class in: " +
+        print("Done executing tests with weight class: " +
           self.weight_classes_allowed_.__str__())
 
         num_tests_failed = 0
@@ -485,8 +561,10 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         else:
             print(f"\033[31mNumber of failed tests            : {num_tests_failed}\033[0m")
 
-        self.writeRequirementsTraceabilityMatrix()
-        self.writeResultsDatabase()
+        if self.generate_requirements_matrix_:
+            self.writeRequirementsTraceabilityMatrix()
+        if self.generate_results_database_:
+            self.writeResultsDatabase()
 
         # Printing failure logs
         failure_reasons: list[str] = []
