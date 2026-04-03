@@ -81,6 +81,11 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                 "traceability matrix.")
         params.addOptionalParam("test_results_database_outputfile", "TestResults.yaml",
                                 "File to which the results database is to be written.")
+        params.addOptionalParam("generate_requirements_matrix", False,
+                                "Generate requirements traceability matrix.")
+        params.addOptionalParam("generate_results_database", False,
+                                "Generate results database.")
+
 
         return params
 
@@ -117,6 +122,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             self.exclude_folders_.append(subparam.getStringValue())
 
         # Requirement Documents
+        self.generate_requirements_matrix_ = params.getParam("generate_requirements_matrix").getBooleanValue()
+
         requirement_docs = params.getParam("requirement_docs")
         self.requirement_docs_ = []
         for subparam in requirement_docs:
@@ -148,6 +155,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.requirements_matrix_outputfile_ = \
             params.getParam("requirements_matrix_outputfile").getStringValue()
 
+        self.generate_results_database_ = params.getParam("generate_results_database").getBooleanValue()
         self.test_results_database_outputfile_ = \
             params.getParam("test_results_database_outputfile").getStringValue()
 
@@ -554,8 +562,10 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         else:
             print(f"\033[31mNumber of failed tests            : {num_tests_failed}\033[0m")
 
-        self.writeRequirementsTraceabilityMatrix()
-        self.writeResultsDatabase()
+        if self.generate_requirements_matrix_:
+            self.writeRequirementsTraceabilityMatrix()
+        if self.generate_results_database_:
+            self.writeResultsDatabase()
 
         # Printing failure logs
         failure_reasons: list[str] = []
