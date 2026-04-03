@@ -166,6 +166,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         print("Project-root", self.project_root_)
 
         # Process the config file
+        self.num_init_warnings_ = 0
         config_file_path = ""
         possible_config_file_path1 = self.project_root_ + self.config_file_
         possible_config_file_path2 = file_path + "../" + self.config_file_
@@ -265,8 +266,6 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.max_num_procs_ = 1
 
         self.tests_: list[TFCTestObject] = []
-
-        self.num_init_warnings_ = 0
 
         directories = []
         if self.directory_.find(",") < 0:
@@ -501,7 +500,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         active_tests: list[TFCTestObject] = []
 
         # ======================================= Testing phase
-        print("\nRunning tests " + self.weight_classes_allowed_.__str__() + "")
+        print("\nRunning tests with weight class:" + self.weight_classes_allowed_.__str__() + "")
         k = 0
         while True:
             k += 1
@@ -541,7 +540,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
 
-        print("Done executing tests with class in: " +
+        print("Done executing tests with weight class: " +
           self.weight_classes_allowed_.__str__())
 
         num_tests_failed = 0
