@@ -52,7 +52,16 @@ class TFCTestObject(TFCObject):
         params.addOptionalParam("num_procs", 1,
                                 "The number of mpi processes used.")
         params.addOptionalParam("weight_class", "",
-                                "The weight class")
+                                "The weight class of this test. The classes "
+                                "allowed depends on whether a custom weight "
+                                "map has been assigned in the test system's "
+                                "config file. If no custom weight map is "
+                                "assigned then the weight class will be short, "
+                                "intermediate, or long, otherwise the weight "
+                                "class must correspond to one of the classes "
+                                "in the custom map. If not supplied the test "
+                                "will revert to what the test system's "
+                                "default is.")
         params.addOptionalParam("outfileprefix", "",
                                 'Will default to the test name + .out, '
                                 'otherwise outfileprefix+.out.')
@@ -263,7 +272,36 @@ class TFCTestObject(TFCObject):
                                         universal_newlines=True)
 
 
-    def messageResult(self, max_num_procs, print_width, annotations, cntl_char_pad) -> tuple:
+    def messageResult(self, max_num_procs: int, print_width: int,
+                      annotations: list[str], cntl_char_pad: int) -> tuple:
+        """
+        Generates a formatted message summarizing the result of a test or
+        process execution, along with updated control character padding.
+
+        Args:
+            max_num_procs (int):       The maximum number of processes used,
+                                       which determines the width of the process
+                                       count in the output string.
+
+            print_width (int):         The desired width of the output string,
+                                       used for formatting.
+
+            annotations (list of str): A list of annotations to include in the
+                                       result message.
+
+            cntl_char_pad (int):       The initial padding for control
+                                       characters, which will be updated
+                                       based on the formatting applied in
+                                       the message.
+        Returns:
+            tuple: A tuple containing:
+                - message (str):       The formatted result message including
+                                       process count, test name, annotations,
+                                       pass/fail status, and execution time.
+
+                - cntl_char_pad (int): The updated control character padding
+                                       after formatting.
+        """
         pcount_width = int(math.floor(math.log10(max_num_procs)))+1
 
         prefix = f"\033[33m[{self.num_procs_:{pcount_width}d}]\033[0m  "
@@ -350,33 +388,33 @@ class TFCTestObject(TFCObject):
 
             else:
 
-                # Set the current run time so we can check if the test is hanging
-                self._time_current_ = time.perf_counter() - self._time_start_
-
                 # If time limits are being enforced
                 if not test_system.no_time_limit_:
+
+                    # Set the current run time so we can check if the test is hanging
+                    self._time_current_ = time.perf_counter() - self._time_start_
+
                     # Check if the test has run beyond permitted time.
                     # This prevents hanging tests that never finish.
-                    for weight_name in test_system.weight_map_:
-                        for weight, time_limit in weight_name.items():
-                            if self.weight_class_ == weight:
-                                if self._time_current_ >= time_limit:
-                                    self.time_limit_ = True
-                                    self.fail_flag_ = (
-                                    f'"{self.weight_class_}" weight test '
-                                    f'exceeded time limit of {time_limit}s.')
-                                    annotations.append(f"Note: {self.fail_flag_}")
-                                    self.fail_flag_reason_ = f"Fail flag: {self.fail_flag_}"
-                                    self._process_.terminate()
-                                    self._time_end_ = time.perf_counter()
-                                    message, cntl_char_pad = (
-                                    self.messageResult(test_system.max_num_procs_,
-                                                       test_system.print_width_,
-                                                       annotations,
-                                                       cntl_char_pad))
-                                    print(message)
-                                    self.ran_ = True
-                                    return "Done"
+                    if self.weight_class_ in test_system.weight_map_:
+                        time_limit = test_system.weight_map_[self.weight_class_]
+                        if self._time_current_ >= time_limit:
+                            self.time_limit_ = True
+                            self.fail_flag_ = (
+                            f'"{self.weight_class_}" weight test '
+                            f'exceeded time limit of {time_limit}s.')
+                            annotations.append(f"Note: {self.fail_flag_}")
+                            self.fail_flag_reason_ = f"Fail flag: {self.fail_flag_}"
+                            self._process_.terminate()
+                            self._time_end_ = time.perf_counter()
+                            message, cntl_char_pad = (
+                            self.messageResult(test_system.max_num_procs_,
+                                               test_system.print_width_,
+                                               annotations,
+                                               cntl_char_pad))
+                            print(message)
+                            self.ran_ = True
+                            return "Done"
 
                 return "Running"
 

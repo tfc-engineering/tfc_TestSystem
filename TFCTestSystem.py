@@ -60,8 +60,13 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         params.addOptionalParam("num_jobs", int(4),
                                 "The number of jobs that may run at the same time.")
         params.addOptionalParam("weights", ["all"],
-                                "Weight classes to execute. "
-                                "Defaults to all.")
+                                'Weight classes to execute. '
+                                'Defaults to ["all"]. The classes allowed '
+                                'depends on whether a custom weight map has '
+                                'been assigned in the test system config file. '
+                                'If no custom weight map is assigned then the '
+                                'weight classes will be short, intermediate, or '
+                                'long, or all.')
         params.addOptionalParam("no_time_limit", False,
                                 "Don't enforce weight class time limits. "
                                 "Defaults to False.")
@@ -196,23 +201,50 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                 if param == "default_weight":
                     self.default_weight_ = yaml_dict[param]
 
+                if param == "requirement_docs":
+                    requirement_docs = yaml_dict[param]
+                    self.requirement_docs_ = []
+                    for subparam in requirement_docs:
+                        self.requirement_docs_.append(subparam)
+
+                    if len(self.requirement_docs_) > 0:
+                        print("Requirement docs:")
+                        for req_doc in self.requirement_docs_:
+                            existence_status = "" if os.path.isfile(req_doc) else " (not found)"
+                            print(f"  {req_doc}" + existence_status)
+
+                    self.requirement_blocks_ = []
+                    for req_doc in self.requirement_docs_:
+                        if not os.path.isfile(req_doc):
+                            continue
+
+                        doc_reqs = self.parseRequirementDocument(req_doc)
+
+                        self.requirement_blocks_.append(doc_reqs)
+
+                if param == "requirements_output":
+                    self.requirements_matrix_outputfile_ = yaml_dict[param]
+                if param == "results_output":
+                    self.test_results_database_outputfile_= yaml_dict[param]
+
         if self.weight_map_ == "":
-            self.weight_map_ = [{"short": 2.0}, {"intermediate": 10.0}, {"long": 20.0}]
+            self.weight_map_ = {"short": 2.0, "intermediate": 10.0, "long": 20.0}
 
         if self.default_weight_ != "":
-            found_weight = False
-            for weight_name in self.weight_map_:
-                for weight in weight_name.keys():
-                    if self.default_weight_ == weight:
-                        found_weight = True
-                        break
-            if found_weight == False:
+            if self.default_weight_ not in self.weight_map_:
                 print(f'\033[31mWARNING: default_weight set in config file {self.config_file_} ' +
                       f'but not found in weight_map. Ignoring default_weight.\033[0m')
                 self.default_weight_ = ""
 
         if "all" in self.weights_:
-            self.weights_ = [weight for weight_map in self.weight_map_ for weight in weight_map.keys()]
+            self.weights_ = list(self.weight_map_.keys())
+
+        # check if we have unrecognized weights
+        for weight in self.weights_:
+            if weight not in self.weight_map_:
+                print(f'\033[31mWARNING: weight "{weight}" is not in weight_map. '
+                      f'Falling back to "all".\033[0m')
+                self.weights_ = list(self.weight_map_.keys())
 
         self.weight_classes_allowed_ = self.weights_
 
@@ -256,15 +288,15 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         print("\n***** TFCTestSystem created *****")
 
-        print(f" Main executable        : {exe_printed_value}")
-        print(f" Number of jobs         : {self.num_jobs_}")
-        print(f" Weight classes         : {self.weight_classes_allowed_}")
-        if self.default_weight_ != "":
-            print(f" Default weight class   : {self.default_weight_}")
-        print(f" Compiler env-var       : {self.compiler_}")
-        print(f" System details         : {self.os_details_}")
-        print(f" System version         : {self.os_version_}")
-        print(f" System release         : {self.os_release_}")
+        print(f" Main executable          : {exe_printed_value}")
+        print(f" Number of jobs           : {self.num_jobs_}")
+        print(f" Weight map               : {self.weight_classes_allowed_}")
+        print(f" Weight class time limits : {self.weight_map_}")
+        print(f" Default weight class     : {self.default_weight_}")
+        print(f" Compiler env-var         : {self.compiler_}")
+        print(f" System details           : {self.os_details_}")
+        print(f" System version           : {self.os_version_}")
+        print(f" System release           : {self.os_release_}")
         print(f" ")
 
 
@@ -510,8 +542,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             if not test.passed_:
                 num_tests_failed += 1
             if test.skip_:
-                if not test.passed_:
-                    num_tests_skipped += 1
+                num_tests_skipped += 1
 
         print()
         print("Elapsed time                       : {:.2f} seconds".format(elapsed_time))
