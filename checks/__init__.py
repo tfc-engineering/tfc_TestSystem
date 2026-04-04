@@ -12,4 +12,5 @@ __all__ = ['ExitCodeCheck',
            'WordFloatCheck',
            'WordStringCheck',
            'HasStringCheck',
-           'TextFileDiffCheck']
+           'TextFileDiffCheck',
+           'ResultTagCheck']

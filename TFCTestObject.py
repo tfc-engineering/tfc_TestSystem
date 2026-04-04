@@ -159,6 +159,8 @@ class TFCTestObject(TFCObject):
 
         self.test_result_annotation_ = ""
 
+        self.tagged_results_ = {}
+
 
     def setTestSystemReference(self, ref):
         self.test_system_reference_ = ref
@@ -280,7 +282,8 @@ class TFCTestObject(TFCObject):
 
 
     def messageResult(self, max_num_procs: int, print_width: int,
-                      annotations: list[str], cntl_char_pad: int) -> tuple:
+                      annotations: list[str], cntl_char_pad: int,
+                      print_result_tags:bool = False) -> tuple:
         """
         Generates a formatted message summarizing the result of a test or
         process execution, along with updated control character padding.
@@ -300,6 +303,9 @@ class TFCTestObject(TFCObject):
                                        characters, which will be updated
                                        based on the formatting applied in
                                        the message.
+            print_result_tags (bool)   If set to true, will print result tags
+                                       on the message.
+
         Returns:
             tuple: A tuple containing:
                 - message (str):       The formatted result message including
@@ -344,6 +350,18 @@ class TFCTestObject(TFCObject):
 
         message = prefix + pretty_name + suffix
 
+        # This will print a quick view of result tags, meant
+        # only for convenience
+        if print_result_tags and len(self.tagged_results_) > 0:
+            tag_results = ""
+            for id, tag in enumerate(self.tagged_results_):
+                result = self.tagged_results_[tag]
+                tag_results += f"{tag}={result}"
+                if (id+1) < len(self.tagged_results_):
+                    tag_results += ", "
+
+            message += " " + tag_results
+
         return message, cntl_char_pad
 
 
@@ -353,6 +371,8 @@ class TFCTestObject(TFCObject):
 
         if self.ran_:
             return "Done"
+        
+        print_result_tags = test_system.tests_print_result_tags_
 
         error_code = 0
         out_file_name = ""
@@ -484,7 +504,8 @@ class TFCTestObject(TFCObject):
         message, cntl_char_pad = self.messageResult(test_system.max_num_procs_,
                                                     test_system.print_width_,
                                                     annotations,
-                                                    cntl_char_pad)
+                                                    cntl_char_pad,
+                                                    print_result_tags)
         print(message)
 
         if self.skip_ == "":

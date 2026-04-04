@@ -85,6 +85,10 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                 "Generate requirements traceability matrix.")
         params.addOptionalParam("generate_results_database", False,
                                 "Generate results database.")
+        params.addOptionalParam("tests_print_result_tags", False,
+                                "A flag, when set, makes tests verbosely print their"
+                                " result tags and values on the same line as "
+                                "the pass and fail lines.")
 
 
         return params
@@ -158,6 +162,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.generate_results_database_ = params.getParam("generate_results_database").getBooleanValue()
         self.test_results_database_outputfile_ = \
             params.getParam("test_results_database_outputfile").getStringValue()
+        
+        self.tests_print_result_tags_ = \
+            params.getParam("tests_print_result_tags").getBooleanValue()
 
         project_root = params.getParam("project_root").getStringValue()
         if project_root == "":

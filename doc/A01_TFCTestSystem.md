@@ -30,6 +30,13 @@ It has the following input parameters:
    File to which to write the requirements traceability matrix.
  - `test_results_database_outputfile` (Optional, default = "TestResults.yaml").
    File to which the results database is to be written.
+ - `generate_requirements_matrix` (Optional, default = False). Generate 
+   requirements traceability matrix.
+ - `generate_results_database` (Optional, default = False) Generate results 
+   database.
+ - `tests_print_result_tags` (Optional, default = False) A flag, when set, 
+   makes tests verbosely print their result tags and values on the same line as 
+   the pass and fail lines.
 
 An instance of a `TFCTestSystem` object is instantiated from an executable
 script (e.g., [ExampleTestSystemEXE.py](../src/tfc_TestSystem/ExampleTestSystemEXE.py))
