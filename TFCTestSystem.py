@@ -162,7 +162,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.generate_results_database_ = params.getParam("generate_results_database").getBooleanValue()
         self.test_results_database_outputfile_ = \
             params.getParam("test_results_database_outputfile").getStringValue()
-        
+
         self.tests_print_result_tags_ = \
             params.getParam("tests_print_result_tags").getBooleanValue()
 

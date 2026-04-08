@@ -215,11 +215,14 @@ class TFCTraceabilityMatrix:
         #======================================== Determine test subscriptions
         requirements_to_test_mapping = {}
         req2map = requirements_to_test_mapping # shorthand name
+        tests_without_requirements = []
 
         # Loop over tests, for each requirement they list,
         # build an inverse map
         test_objects = self.tests_
         for test_object in test_objects:
+            if len(test_object.requirements_) == 0:
+                tests_without_requirements += [test_object]
             for requirement_str in test_object.requirements_:
                 if not requirement_str in req2map:
                     req2map[requirement_str] = []
@@ -254,27 +257,47 @@ class TFCTraceabilityMatrix:
 
         if len(invalid_tests) == 0:
             integrity += "There are no tests that reference unregistered " + \
-                         "requirements."
+                         "requirements.\n\n"
         else:
             integrity += f'Number of tests that reference ' + \
                          f'unregistered requirements = {len(invalid_tests)}:\n\n'
+            integrity += "<details>\n"
+            integrity += "<summary>List:</summary>\n"
             for test_name, invalid_reqs in invalid_tests.items():
-                integrity += f'- {test_name}: '
+                integrity += f'{test_name}: '
                 for id, req in enumerate(invalid_reqs):
                     integrity += coloredText("red", req)
                     if id < len(invalid_reqs)-1: integrity += ", "
 
                 integrity += "\n"
+            integrity += "</details>\n\n<br>"
 
         if len(requirements_without_tests) == 0:
-            integrity += "\nThere are no untested requirements."
+            integrity += "\nThere are no untested requirements.\n\n"
         else:
             integrity += f'\nNumber of requirement that have no associated ' + \
-                         f'test = {len(requirements_without_tests)}:\n\n'
+                         f'test = {len(requirements_without_tests)}:\n'
+            integrity += "<details>\n"
+            integrity += "<summary>List:</summary>\n"
             for topic_req_tag in requirements_without_tests:
-                integrity += "- " + coloredText("red", topic_req_tag) + '\n'
+                integrity += coloredText("red", topic_req_tag) + '<br>\n'
+            integrity += "</details>\n\n<br>"
+
+        if len(tests_without_requirements) == 0:
+            integrity += "\nThere are no tests that lack requirement links.\n"
+        else:
+            integrity += f'\nNumber of tests without requirement links = ' + \
+                         f'{len(tests_without_requirements)}:\n'
+            integrity += "<details>\n"
+            integrity += "<summary>List:</summary>\n"
+            for test_object in tests_without_requirements:
+                integrity += f'{test_object.name_}<br>\n'
+            integrity += "</details>\n\n<br>"
+
         rtmfile.write(integrity)
         rtmfile.write("\n\n")
+
+
 
 
         #======================================== Internal routine to write
