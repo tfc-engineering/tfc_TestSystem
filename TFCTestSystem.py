@@ -75,7 +75,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         params.addOptionalParam("exclude_folders", [],
                                 "List of directories to exclude when searching for test files")
         params.addOptionalParam("requirement_docs", [],
-                                "List of documents to search for requirements.")
+                                "List of documents to search for requirements. If a folder, "
+                                "will recursively search for .md files. Start with ! to exclude a "
+                                "file/folder.")
         params.addOptionalParam("requirements_matrix_outputfile", "TraceAbilityMatrix.md",
                                 "File to which to write the requirements "
                                 "traceability matrix.")
@@ -128,16 +130,40 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         # Requirement Documents
         self.generate_requirements_matrix_ = params.getParam("generate_requirements_matrix").getBooleanValue()
 
-        requirement_docs = params.getParam("requirement_docs")
-        self.requirement_docs_ = []
-        for subparam in requirement_docs:
-            self.requirement_docs_.append(subparam.getStringValue())
+        requirement_docs_param = params.getParam("requirement_docs")
+        temp_requirement_docs = []
+        excluded_requirement_docs = []
+        for subparam in requirement_docs_param:
+            str_subparam = subparam.getStringValue()
+            if len(str_subparam) > 0 and str_subparam[0:1] == "!":
+                excluded_requirement_docs += [str_subparam[1:]]
+                continue
+            temp_requirement_docs += [str_subparam]
 
-        if len(self.requirement_docs_) > 0:
+        print(excluded_requirement_docs)
+
+        self.requirement_docs_ = []
+        if len(temp_requirement_docs) > 0:
             print("Requirement docs:")
-            for req_doc in self.requirement_docs_:
-                existence_status = "" if os.path.isfile(req_doc) else " (not found)"
-                print(f"  {req_doc}" + existence_status)
+            for req_path in temp_requirement_docs:
+                if req_path in excluded_requirement_docs:
+                    continue
+
+                if os.path.isfile(req_path):
+                    self.requirement_docs_ += [req_path]
+                    print(f"  {req_path}")
+                elif os.path.isdir(req_path):
+                    for dir_path, sub_dirs, file_names in os.walk(req_path):
+                        for file_name in file_names:
+                            base_name, extension = os.path.splitext(file_name)
+                            if extension != ".md": continue
+
+                            sub_req_path = f"{dir_path}{file_name}"
+                            if not sub_req_path in excluded_requirement_docs:
+                                self.requirement_docs_ += [f"{sub_req_path}"]
+                                print(f"  {sub_req_path}")
+                else:
+                    print(f"  {req_path} (Not Found)")
 
         self.requirement_blocks_ = []
         for req_doc in self.requirement_docs_:
