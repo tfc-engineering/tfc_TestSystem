@@ -22,6 +22,7 @@ class TFCTestResultsDatabase:
             test_data["annotations"] = test_object.test_result_annotation_
             test_data["test_doc_page"] = test_object.test_doc_page_
             test_data["tagged_results"] = test_object.tagged_results_
+            test_data["generic_tags"] = test_object.generic_tags_
             database.append(test_data)
 
         yaml.dump(database, db_file, sort_keys=False)

@@ -98,6 +98,8 @@ class TFCTestObject(TFCObject):
                                 "that are addressed by this test.")
         params.addOptionalParam("test_doc_page", "",
                                 "A link to a documentation page for this test.")
+        params.addOptionalParam("generic_tags", [],
+                                "Generic string tags that can be used to filter tests.")
 
         return params
 
@@ -130,6 +132,10 @@ class TFCTestObject(TFCObject):
             self.requirements_.append(sub_param.getStringValue())
 
         self.test_doc_page_ = params.getParam("test_doc_page").getStringValue()
+        generic_tags = params.getParam("generic_tags")
+        self.generic_tags_ = []
+        for sub_param in generic_tags:
+            self.generic_tags_ += [sub_param.getStringValue()]
 
         self.test_system_reference_ = None
 
@@ -371,7 +377,7 @@ class TFCTestObject(TFCObject):
 
         if self.ran_:
             return "Done"
-        
+
         print_result_tags = test_system.tests_print_result_tags_
 
         error_code = 0

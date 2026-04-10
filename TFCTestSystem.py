@@ -593,13 +593,29 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             print(f"Number of failed tests            : {num_tests_failed}")
         else:
             print(f"\033[31mNumber of failed tests            : {num_tests_failed}\033[0m")
+        print()
+
+        # ======================================= Post-processing entities
+        performance_tests = []
+        for test in self.tests_:
+            if "is_performance_test" in test.generic_tags_:
+                performance_tests += [test]
+
+        if len(performance_tests) > 0:
+            print("Performance Evaluations:")
+            for test in performance_tests:
+                output = ""
+                for result_tag,value in test.tagged_results_.items():
+                    output += f"{result_tag}={value} "
+                print(f"  {test.name_} {output}")
+            print()
 
         if self.generate_requirements_matrix_:
             self.writeRequirementsTraceabilityMatrix()
         if self.generate_results_database_:
             self.writeResultsDatabase()
 
-        # Printing failure logs
+        # ======================================= Printing failure logs
         failure_reasons: list[str] = []
         for test in active_tests:
 
