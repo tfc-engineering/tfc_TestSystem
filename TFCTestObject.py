@@ -146,10 +146,7 @@ class TFCTestObject(TFCObject):
             check = PyFactory.makeObject(id, check_input)
             self.checks_.append(check)
 
-        # pretty_name = os.path.relpath(self.name_, PROJECT_ROOT_PATH)
-        pretty_name = self.name_ # experimental
-
-        print(f'  Created test-job \"{pretty_name}\" with {len(self.checks_)} checks')
+        print(f'  Created test-job \"{self.name_}\" with {len(self.checks_)} checks')
 
         self.ran_: bool = False
         self.submitted_: bool = False
@@ -160,6 +157,16 @@ class TFCTestObject(TFCObject):
         self.test_result_annotation_ = ""
 
         self.tagged_results_ = {}
+
+        # Set console output file
+        dir_, testname_ = os.path.split(self.name_)
+
+        prefix = testname_ if self.outfileprefix_ == "" else self.outfileprefix_
+
+        self.cout_filepath_ = dir_ + f"/out/{prefix}.cout"
+        self.cout_fileunit_ = None
+
+        self.console_output_ = ""
 
 
     def setTestSystemReference(self, ref):
@@ -225,7 +232,7 @@ class TFCTestObject(TFCObject):
         """Submits the test to a process call"""
         self.submitted_ = True
 
-        dir_, filename_ = os.path.split(self.name_)
+        dir_, testname_ = os.path.split(self.name_)
 
         if self.skip_ != "" or self.dependency_failed_ == True:
 
@@ -251,6 +258,7 @@ class TFCTestObject(TFCObject):
                  f'Output:\n{out}' +
                  '\033[0m')
 
+        # Build the command
         cmd = ""
         if not self.disable_mpi_:
             cmd += "mpiexec "
@@ -272,12 +280,18 @@ class TFCTestObject(TFCObject):
         if not os.path.isdir(dir_+"/out"):
             os.mkdir(dir_+"/out")
 
+        # Open the console output file
+        self.cout_fileunit_ = open(self.cout_filepath_, "w")
+        self.cout_fileunit_.write(self._command_ + "\n")
+        self.cout_fileunit_.flush()
+
+        # Run the command
         self._process_ = subprocess.Popen(cmd,
                                         cwd=dir_ + "/" +
                                             self.relative_offset_workdir_,
                                         shell=True,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE,
+                                        stdout=self.cout_fileunit_,
+                                        stderr=subprocess.STDOUT,
                                         universal_newlines=True)
 
 
@@ -337,18 +351,15 @@ class TFCTestObject(TFCObject):
 
         cntl_char_pad += 5 + 4
 
-        # pretty_name = os.path.relpath(self.name_, PROJECT_ROOT_PATH)
-        pretty_name = self.name_ # experimental
-
         time_taken = self._time_end_ - self._time_start_
 
-        width = print_width - len(prefix) - len(pretty_name) \
+        width = print_width - len(prefix) - len(self.name_) \
               - len(suffix) + cntl_char_pad
         width = max(width, 0)
 
         suffix = '  ' + '.' * width + suffix + f" {time_taken:.1g}s"
 
-        message = prefix + pretty_name + suffix
+        message = prefix + self.name_ + suffix
 
         # This will print a quick view of result tags, meant
         # only for convenience
@@ -371,11 +382,10 @@ class TFCTestObject(TFCObject):
 
         if self.ran_:
             return "Done"
-        
+
         print_result_tags = test_system.tests_print_result_tags_
 
         error_code = 0
-        out_file_name = ""
         dir_, testname_ = os.path.split(self.name_)
         annotations = []
         cntl_char_pad = 0
@@ -398,20 +408,22 @@ class TFCTestObject(TFCObject):
 
             if self._process_.poll() is not None:
 
-                out, err = self._process_.communicate()
+                self._process_.wait()
 
+                # Close the console output file and reopen it to read its
+                # contents into memory
+                self.cout_fileunit_.close()
+
+                try:
+                    with open(self.cout_filepath_, "r") as cout_file:
+                        self.console_output_ = cout_file.read()
+                except Exception as e:
+                    annotations.append("Failed to open console output")
+
+                # Other house keeping
                 error_code = self._process_.returncode
 
                 self._time_end_ = time.perf_counter()
-
-                prefix = testname_ if self.outfileprefix_ == "" else self.outfileprefix_
-
-                out_file_name = dir_ + f"/out/{prefix}.cout"
-                file = open(out_file_name, "w")
-                file.write(self._command_ + "\n")
-                file.write(out + "\n")
-                file.write(err + "\n")
-                file.close()
 
             else:
 
@@ -469,9 +481,9 @@ class TFCTestObject(TFCObject):
             test_config = dict(
                 test = self,
                 test_system = test_system,
-                output = out,
+                output = self.console_output_,
                 error_code = error_code,
-                out_file_name = out_file_name,
+                out_file_name = self.cout_filepath_,
                 out_directory = dir_+"/out",
                 work_directory = dir_ + "/" + self.relative_offset_workdir_,
                 test_file_directory = dir_,
