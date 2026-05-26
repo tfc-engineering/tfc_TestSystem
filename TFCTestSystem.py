@@ -608,9 +608,10 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
             reason = f'{test.name_}:\n' + f'{test.fail_flag_reason_}'
 
-            for check in test.checks_:
+            for check_id, check in enumerate(test.checks_):
                 if check.failed_:
-                    reason += f'{type(check)} {check.fail_reason_}'
+                    raw_reason = f'Check {check_id:2d} type={check.type_} {check.fail_reason_}'
+                    reason += raw_reason.rstrip() + os.linesep
 
             failure_reasons.append(reason)
 
