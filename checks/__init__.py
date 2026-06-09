@@ -5,6 +5,7 @@ from .WordFloatCheck import *
 from .WordStringCheck import *
 from .HasStringCheck import *
 from .TextFileDiffCheck import *
+from .ResultTagCheck import *
 from .CustomPythonCheck import *
 
 __all__ = ['ExitCodeCheck',

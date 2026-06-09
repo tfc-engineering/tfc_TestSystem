@@ -87,10 +87,15 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                 "Generate requirements traceability matrix.")
         params.addOptionalParam("generate_results_database", False,
                                 "Generate results database.")
+        params.addOptionalParam("merge_results_file", "",
+                                "Existing TestResults.yaml file to merge updated test results into.")
         params.addOptionalParam("tests_print_result_tags", False,
                                 "A flag, when set, makes tests verbosely print their"
                                 " result tags and values on the same line as "
                                 "the pass and fail lines.")
+        params.addOptionalParam("selected_tests", [],
+                                "Explicit list of test names to execute. Any dependent "
+                                "tests required by the selected tests are included automatically.")
 
 
         return params
@@ -118,6 +123,11 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
         self.config_file_ = params.getParam("config_file").getStringValue()
         self.compiler_ = os.getenv("COMPILER")
+        self.merge_results_file_ = params.getParam("merge_results_file").getStringValue()
+        selected_tests = params.getParam("selected_tests")
+        self.selected_tests_ = []
+        for subparam in selected_tests:
+            self.selected_tests_.append(subparam.getStringValue())
         self.os_version_ = platform.version()
         self.os_release_ = platform.release()
         self.os_details_ = platform.platform()
@@ -312,6 +322,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                                           self.exclude_folders_,
                                                           True)
             self._parseTestFiles(test_files=test_files)
+
+        if self.selected_tests_:
+            self._filterSelectedTests()
 
         for test in self.tests_:
             self.max_num_procs_ = max(self.max_num_procs_, test.num_procs_)
@@ -522,6 +535,43 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                     self.num_init_warnings_ += 1
 
 
+    def _filterSelectedTests(self):
+        selected_names = set(self.selected_tests_)
+        dependency_names: set[str] = set()
+        queue = [test for test in self.tests_ if test.name_ in selected_names]
+
+        while queue:
+            test = queue.pop()
+            for dependency in test.dependencies_:
+                dep_name = dependency.getStringValue()
+                if dep_name in ("", '""') or dep_name in dependency_names:
+                    continue
+                dependency_names.add(dep_name)
+                for candidate in self.tests_:
+                    candidate_name = candidate.name_.rsplit("/", 1)[-1]
+                    if candidate_name == dep_name:
+                        queue.append(candidate)
+
+        filtered_tests = []
+        existing_names = {test.name_ for test in self.tests_}
+        missing_tests = sorted(selected_names.difference(existing_names))
+        for test in self.tests_:
+            short_name = test.name_.rsplit("/", 1)[-1]
+            if test.name_ in selected_names or short_name in dependency_names:
+                filtered_tests.append(test)
+
+        self.tests_ = filtered_tests
+
+        print("Selected test filter active:")
+        print(f"  Requested tests          : {len(selected_names)}")
+        print(f"  Including dependencies   : {len(dependency_names)}")
+        print(f"  Tests scheduled to run   : {len(self.tests_)}")
+        if missing_tests:
+            print("  Requested tests not found:")
+            for name in missing_tests:
+                print(f"    {name}")
+
+
     def run(self):
         """Actually executes the test system"""
 
@@ -540,8 +590,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
             done = True  # Assume we are done
             for test in self.tests_:
-                if test.ran_ or (test.weight_class_ not in self.weight_classes_allowed_):
-                    test.ran_ = True
+                if test.ran_:
+                    continue
+                if test.weight_class_ not in self.weight_classes_allowed_:
                     continue
                 done = False
 
