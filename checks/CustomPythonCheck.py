@@ -56,7 +56,7 @@ class CustomPythonCheck(CheckBase):
         if procedure_name in namespace:
             # This retrieves the function object and calls it
             try:
-                result = namespace[procedure_name](config["work_directory"])
+                result = namespace[procedure_name](config) # Pass the whole config so check can access all paths
             except Exception as ex:
                 message = f'Error executing custom script "{self.python_script_}".'
                 message += f"\n{ex}"
