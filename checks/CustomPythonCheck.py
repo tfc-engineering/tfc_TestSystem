@@ -1,6 +1,5 @@
 import pathlib
 import os
-import time
 
 from tfc_PyFactory.InputParameters import InputParameters
 file_path = str(pathlib.Path(__file__).parent.resolve()) + "/"
@@ -58,14 +57,12 @@ class CustomPythonCheck(CheckBase):
             # This retrieves the function object and calls it
             try:
                 result = namespace[procedure_name](config) # Pass the whole config so check can access all paths
-                config["test"]._time_end_ = time.perf_counter() # Update the test time with the true run time after the custom check finishes
             except Exception as ex:
                 message = f'Error executing custom script "{self.python_script_}".'
                 message += f"\n{ex}"
                 annotations.append("Python error")
                 self.failed_ = True
                 self.fail_reason_ = message
-                config["test"]._time_end_ = time.perf_counter() # Update the test time even if we fail
                 return False
 
             if not isinstance(result, bool):

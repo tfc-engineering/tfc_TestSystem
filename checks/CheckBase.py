@@ -22,6 +22,7 @@ class CheckBase(TFCObject):
 
         self.failed_: bool = False
         self.fail_reason_: str = "Unknown"
+        self.check_time_: float = 0.0 # Time for this particular check.
 
 
     # config = dict(

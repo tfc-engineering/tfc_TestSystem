@@ -373,6 +373,10 @@ class TFCTestObject(TFCObject):
 
             message += " " + tag_results
 
+        if self.debug_:
+            for check in self.checks_:
+               message += "\n[Time of check " + check.__dict__["name_"] + f": {check.check_time_}]"
+
         return message, cntl_char_pad
 
 
@@ -422,8 +426,6 @@ class TFCTestObject(TFCObject):
 
                 # Other house keeping
                 error_code = self._process_.returncode
-
-                self._time_end_ = time.perf_counter()
 
             else:
 
@@ -493,8 +495,11 @@ class TFCTestObject(TFCObject):
 
             for check in self.checks_:
                 result = check.executeCheck(test_config, annotations)
+                check.check_time_ = time.perf_counter() - self._time_start_ # This check time.
                 if not result:
                     self.passed_ = False
+
+            self._time_end_ = time.perf_counter() # Total case time.
 
             if self.pass_flag_ != "":
                 annotations.append( f"Note: {self.pass_flag_}")
