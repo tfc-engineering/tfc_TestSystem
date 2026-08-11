@@ -65,6 +65,7 @@ class CustomPythonCheck(CheckBase):
                 annotations.append("Python error")
                 self.failed_ = True
                 self.fail_reason_ = message
+                config["test"]._time_end_ = time.perf_counter() # Update the test time even if we fail
                 return False
 
             if not isinstance(result, bool):
