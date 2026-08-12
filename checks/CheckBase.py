@@ -1,4 +1,5 @@
 import pathlib
+import time
 
 from tfc_PyFactory.InputParameters import InputParameters
 file_path = str(pathlib.Path(__file__).parent.resolve()) + "/"
@@ -32,6 +33,14 @@ class CheckBase(TFCObject):
     #         out_file_name = out_file_name,
     #         out_directory = dir_+"/out"
     #     )
+    def timedExecuteCheck(self, config: dict, annotations: list[str]) -> bool:
+        """Wraps executeCheck with a timer."""
+        self.check_time_ = time.perf_counter()
+        result = self.executeCheck(config, annotations)
+        self.check_time_ = time.perf_counter() - self.check_time_
+        return result
+
+
     def executeCheck(self, config: dict, annotations: list[str]) -> bool:
         """Executes a given check.
         The 'annotations' parameter is a list of annotations to provide
