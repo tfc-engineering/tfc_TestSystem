@@ -136,7 +136,8 @@ class TFCTestObject(TFCObject):
         self.checks_: list[CheckBase] = []
         self._process_ = None
         self._time_start_ = time.perf_counter()
-        self._time_end_ = time.perf_counter()
+        self._case_time_ = self._time_start_
+        self._time_end_ = self._time_start_
         self._time_current_ = 0.0
         self._command_ = ""
 
@@ -230,6 +231,7 @@ class TFCTestObject(TFCObject):
 
     def submit(self, test_system) -> None:
         """Submits the test to a process call"""
+        self._time_start_ = time.perf_counter()
         self.submitted_ = True
 
         dir_, testname_ = os.path.split(self.name_)
@@ -373,6 +375,10 @@ class TFCTestObject(TFCObject):
 
             message += " " + tag_results
 
+        if self.debug_:
+            for check in self.checks_:
+               message += "\n[Time of check " + check.__dict__["name_"] + f": {check.check_time_}]"
+
         return message, cntl_char_pad
 
 
@@ -409,6 +415,7 @@ class TFCTestObject(TFCObject):
             if self._process_.poll() is not None:
 
                 self._process_.wait()
+                self._case_time_ = time.perf_counter() - self._time_start_
 
                 # Close the console output file and reopen it to read its
                 # contents into memory
@@ -422,8 +429,6 @@ class TFCTestObject(TFCObject):
 
                 # Other house keeping
                 error_code = self._process_.returncode
-
-                self._time_end_ = time.perf_counter()
 
             else:
 
@@ -492,9 +497,11 @@ class TFCTestObject(TFCObject):
             )
 
             for check in self.checks_:
-                result = check.executeCheck(test_config, annotations)
+                result = check.timedExecuteCheck(test_config, annotations)
                 if not result:
                     self.passed_ = False
+
+            self._time_end_ = time.perf_counter()
 
             if self.pass_flag_ != "":
                 annotations.append( f"Note: {self.pass_flag_}")
