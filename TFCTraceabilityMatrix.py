@@ -207,7 +207,35 @@ class TFCTraceabilityMatrix:
 
 
     #################################################################
-    def writeRequirementsTraceabilityMatrix(self) -> None:
+    @staticmethod
+    def _test_name(test_object) -> str:
+        if isinstance(test_object, dict):
+            return test_object.get("name", "")
+        return test_object.name_
+
+
+    @staticmethod
+    def _test_requirements(test_object) -> list[str]:
+        if isinstance(test_object, dict):
+            return test_object.get("requirements", []) or []
+        return test_object.requirements_
+
+
+    @staticmethod
+    def _test_passed(test_object) -> bool:
+        if isinstance(test_object, dict):
+            return bool(test_object.get("passed", False))
+        return test_object.passed_
+
+
+    @staticmethod
+    def _test_annotation(test_object) -> str:
+        if isinstance(test_object, dict):
+            return test_object.get("annotations", "")
+        return test_object.test_result_annotation_
+
+
+    def _writeRequirementsTraceabilityMatrix(self, test_objects) -> None:
         """Cleverly writes the requirements traceability matrix."""
         rtmfile = open(self.requirements_matrix_outputfile_, "w")
         req_blocks = self.requirement_blocks_
@@ -219,11 +247,11 @@ class TFCTraceabilityMatrix:
 
         # Loop over tests, for each requirement they list,
         # build an inverse map
-        test_objects = self.tests_
         for test_object in test_objects:
-            if len(test_object.requirements_) == 0:
+            requirements = self._test_requirements(test_object)
+            if len(requirements) == 0:
                 tests_without_requirements += [test_object]
-            for requirement_str in test_object.requirements_:
+            for requirement_str in requirements:
                 if not requirement_str in req2map:
                     req2map[requirement_str] = []
 
@@ -245,11 +273,11 @@ class TFCTraceabilityMatrix:
         invalid_tests = {}
         for test_object in test_objects:
             test_invalid_reqs = []
-            for requirement_str in test_object.requirements_:
+            for requirement_str in self._test_requirements(test_object):
                 if requirement_str not in reqistered_requirements:
                     test_invalid_reqs.append(requirement_str)
             if len(test_invalid_reqs) > 0:
-                invalid_tests[test_object.name_] = test_invalid_reqs
+                invalid_tests[self._test_name(test_object)] = test_invalid_reqs
 
         integrity = ""
         integrity += "# Test Integrity\n"
@@ -291,7 +319,7 @@ class TFCTraceabilityMatrix:
             integrity += "<details>\n"
             integrity += "<summary>List:</summary>\n"
             for test_object in tests_without_requirements:
-                integrity += f'{test_object.name_}<br>\n'
+                integrity += f'{self._test_name(test_object)}<br>\n'
             integrity += "</details>\n\n<br>"
 
         rtmfile.write(integrity)
@@ -304,16 +332,17 @@ class TFCTraceabilityMatrix:
         #                                         test block
         def writeTestBlockCoverage(test_object):
             coverage = ""
-            annotation = test_object.test_result_annotation_
-            pass_fail = "Pass" if test_object.passed_ else "Fail"
-            pass_fail_color = "green" if test_object.passed_ else "red"
+            annotation = self._test_annotation(test_object)
+            passed = self._test_passed(test_object)
+            pass_fail = "Pass" if passed else "Fail"
+            pass_fail_color = "green" if passed else "red"
 
             pass_fail_str = coloredText(pass_fail_color, pass_fail)
 
             annotation_str = "" if annotation == "" else \
                              f' ({coloredText("cyan", annotation)})'
 
-            coverage += f'- {test_object.name_}'
+            coverage += f'- {self._test_name(test_object)}'
             coverage += annotation_str
             coverage += f' {pass_fail_str}<br>\n'
 
@@ -358,7 +387,7 @@ class TFCTraceabilityMatrix:
                         for test_object in test_objects:
                             coverage += writeTestBlockCoverage(test_object)
                             # coverage += "\n" # needed for FORD
-                            if not test_object.passed_:
+                            if not self._test_passed(test_object):
                                 num_tests_failed += 1
 
                         if num_tests_failed == 0:
@@ -385,3 +414,15 @@ class TFCTraceabilityMatrix:
 
             rtmfile.write(outstr)
         rtmfile.close()
+
+
+    #################################################################
+    def writeRequirementsTraceabilityMatrix(self) -> None:
+        self._writeRequirementsTraceabilityMatrix(self.tests_)
+
+
+    #################################################################
+    def writeRequirementsTraceabilityMatrixFromResults(self, results_file: str) -> None:
+        with open(results_file, "r", encoding="utf-8") as in_file:
+            test_objects = yaml.safe_load(in_file) or []
+        self._writeRequirementsTraceabilityMatrix(test_objects)
