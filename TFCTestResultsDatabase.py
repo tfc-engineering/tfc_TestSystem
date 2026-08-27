@@ -27,19 +27,15 @@ class TFCTestResultsDatabase:
 
         return test_data
 
-    def _mergeResultsDatabase(
-        self,
-        database: list[dict],
-        merge_file: str,
-    ) -> list[dict]:
+    def _mergeResultsDatabase(self,
+                              database: list[dict],
+                              merge_file: str) -> list[dict]:
+
         with open(merge_file, "r", encoding="utf-8") as db_file:
             existing = yaml.safe_load(db_file) or []
 
         merged = []
-        updates = {
-            entry["name"]: entry
-            for entry in database
-        }
+        updates = {entry["name"]: entry for entry in database}
         seen = set()
 
         for entry in existing:
@@ -75,14 +71,7 @@ class TFCTestResultsDatabase:
 
         merge_file = getattr(self, "merge_results_file_", "")
         if merge_file:
-            database = self._mergeResultsDatabase(
-                database,
-                merge_file,
-            )
+            database = self._mergeResultsDatabase(database, merge_file)
 
-        with open(
-            self.test_results_database_outputfile_,
-            "w",
-            encoding="utf-8",
-        ) as db_file:
+        with open(self.test_results_database_outputfile_, "w") as db_file:
             yaml.dump(database, db_file, sort_keys=False)

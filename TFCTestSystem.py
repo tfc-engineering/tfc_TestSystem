@@ -324,7 +324,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             self._parseTestFiles(test_files=test_files)
 
         if self.selected_tests_:
-            self._filterSelectedTests()
+            self.tests_ = self._getFilteredSelectedTests()
 
         for test in self.tests_:
             self.max_num_procs_ = max(self.max_num_procs_, test.num_procs_)
@@ -535,7 +535,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                     self.num_init_warnings_ += 1
 
 
-    def _filterSelectedTests(self):
+    def _getFilteredSelectedTests(self):
         selected_names = set(self.selected_tests_)
         dependency_names: set[str] = set()
         queue = [test for test in self.tests_ if test.name_ in selected_names]
@@ -544,7 +544,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             test = queue.pop()
             for dependency in test.dependencies_:
                 dep_name = dependency.getStringValue()
-                if dep_name in ("", '""') or dep_name in dependency_names:
+                if dep_name in ("", '""'):
                     continue
                 dependency_names.add(dep_name)
                 for candidate in self.tests_:
@@ -560,8 +560,6 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             if test.name_ in selected_names or short_name in dependency_names:
                 filtered_tests.append(test)
 
-        self.tests_ = filtered_tests
-
         print("Selected test filter active:")
         print(f"  Requested tests          : {len(selected_names)}")
         print(f"  Including dependencies   : {len(dependency_names)}")
@@ -570,6 +568,8 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             print("  Requested tests not found:")
             for name in missing_tests:
                 print(f"    {name}")
+
+        return filtered_tests
 
 
     def run(self):
