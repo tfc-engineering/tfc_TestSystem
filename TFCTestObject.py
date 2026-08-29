@@ -199,33 +199,48 @@ class TFCTestObject(TFCObject):
 
     def checkDependenciesMet(self, tests: list[TFCTestObject]) -> bool:
         """Determines, from the supplied tests-list, whether this
-        test's dependendent tests have run.
+        test's dependent tests have run.
         """
         try:
-           if str(*self.dependencies_.sub_params) == '""':
-               return True
+            if str(*self.dependencies_.sub_params) == '""':
+                return True
         except:
-           pass
+            pass
+
+        my_dir = self.name_.rsplit("/", 1)[0] if "/" in self.name_ else ""
 
         for dependency in self.dependencies_:
             dep_name = dependency.getStringValue()
-            dep_found = False
+
+            # Prefer a dependency in the same directory; fall back to any match.
+            # This resolves ambiguity when multiple tests share the same short name.
+            same_dir_match = None
+            any_match = None
             for test in tests:
-                test_name = test.name_
-                last_dash = test_name.rfind("/")
-                test_true_name = test_name if last_dash < 0 else test_name[last_dash+1:]
+                test_short = test.name_.rsplit("/", 1)[-1]
+                if test_short != dep_name:
+                    continue
+                test_dir = test.name_.rsplit("/", 1)[0] if "/" in test.name_ else ""
+                if test_dir == my_dir:
+                    same_dir_match = test
+                    break  # same-dir match is definitive
+                if any_match is None:
+                    any_match = test
 
-                if test_true_name == dep_name:
-                    dep_found = True
-                    if not test.ran_:
-                        return False
-                    # Check if the dependency failed
-                    if test.time_limit_ == True:
-                        self.dependency_failed_ = True
-                        self.fail_flag_ = test.name_.rsplit("/", 1)[-1]
+            match = same_dir_match or any_match
 
-            if dep_found == False: # this test's depencency is not an active test
+            if match is None:
+                # Dependency not found in the active test list — skip this test.
                 self.skip_ = "Dependency not active."
+                continue
+
+            if not match.ran_:
+                return False
+
+            # Dependency ran — check if it hit a time limit (counts as failed)
+            if match.time_limit_:
+                self.dependency_failed_ = True
+                self.fail_flag_ = match.name_.rsplit("/", 1)[-1]
 
         return True
 
