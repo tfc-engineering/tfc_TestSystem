@@ -5,9 +5,6 @@ import sys
 sys.path.append(file_path + "../")
 sys.path.append(file_path + "./")
 
-# from tfc_PyFactory.InputParameters import InputParameters
-
-import tfc_PyFactory
 from tfc_PyFactory import *
 import TFCTestObject
 from TFCTestObject import *
@@ -19,6 +16,8 @@ import os
 import yaml
 import re
 import platform
+import shlex
+import subprocess
 
 # Blurb to fix yaml.safe_load reading scientific notation floats as strings,
 # i.e. 1e5 is seen as a string by default.
@@ -89,6 +88,12 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                 "Generate results database.")
         params.addOptionalParam("merge_results_file", "",
                                 "Existing TestResults.yaml file to merge updated test results into.")
+        params.addOptionalParam("rerun_failures_file", "",
+                                "Existing TestResults.yaml file whose failed tests "
+                                "should be rerun.")
+        params.addOptionalParam("rebuild_rtm_file", "",
+                                "TestResults.yaml file from which to rebuild the "
+                                "requirements traceability matrix after the run.")
         params.addOptionalParam("tests_print_result_tags", False,
                                 "A flag, when set, makes tests verbosely print their"
                                 " result tags and values on the same line as "
@@ -124,10 +129,18 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         self.config_file_ = params.getParam("config_file").getStringValue()
         self.compiler_ = os.getenv("COMPILER")
         self.merge_results_file_ = params.getParam("merge_results_file").getStringValue()
+        self.rerun_failures_file_ = params.getParam("rerun_failures_file").getStringValue()
+        self.rebuild_rtm_file_ = params.getParam("rebuild_rtm_file").getStringValue()
         selected_tests = params.getParam("selected_tests")
         self.selected_tests_ = []
         for subparam in selected_tests:
             self.selected_tests_.append(subparam.getStringValue())
+        if self.rerun_failures_file_:
+            if self.selected_tests_:
+                raise ValueError(
+                    "selected_tests and rerun_failures_file cannot both be set.")
+            self.selected_tests_ = self._failedTestNamesFromResults(
+                self.rerun_failures_file_)
         self.os_version_ = platform.version()
         self.os_release_ = platform.release()
         self.os_details_ = platform.platform()
@@ -279,6 +292,10 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                 if param == "results_output":
                     self.test_results_database_outputfile_= yaml_dict[param]
 
+        if self.merge_results_file_:
+            self.generate_results_database_ = True
+            self.test_results_database_outputfile_ = self.merge_results_file_
+
         if self.weight_map_ == "":
             self.weight_map_ = {"short": 2.0, "intermediate": 10.0, "long": 20.0}
 
@@ -323,7 +340,7 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                                                           True)
             self._parseTestFiles(test_files=test_files)
 
-        if self.selected_tests_:
+        if self.selected_tests_ or self.rerun_failures_file_:
             self.tests_ = self._getFilteredSelectedTests()
 
         for test in self.tests_:
@@ -352,6 +369,65 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         print(f" System release           : {self.os_release_}")
         print(f" ")
 
+    def _runScript(self, script, cwd=None):
+        """Run a POSIX-style test script and wait for it to finish."""
+        if isinstance(script, (list, tuple)):
+            command = shlex.join(
+                str(argument)
+                for argument in script
+            )
+        else:
+            command = str(script)
+
+        if platform.system() == "Windows":
+            # Commands run through Git Bash, so use POSIX-compatible
+            # separators for any Windows paths embedded in the command.
+            command = command.replace("\\", "/")
+
+            bash = None
+
+            for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+                program_files = os.environ.get(variable)
+                if program_files:
+                    candidate = os.path.join(
+                        program_files,
+                        "Git",
+                        "bin",
+                        "bash.exe",
+                    )
+                    if os.path.isfile(candidate):
+                        bash = candidate
+                        break
+
+            if bash is None:
+                bash = shutil.which("bash")
+
+            if bash is None:
+                raise FileNotFoundError(
+                    "Git Bash was not found. Install Git for Windows or add "
+                    "its bin directory to PATH."
+                )
+
+            args = [
+                bash,
+                "--noprofile",
+                "--norc",
+                "-lc",
+                command,
+            ]
+            shell = False
+        else:
+            args = command
+            shell = True
+
+        return subprocess.run(
+            args,
+            cwd=cwd,
+            shell=shell,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
     def _recursiveFindTestListFiles(self, test_dir: str, exclude_folders: list, verbose: bool = False):
         """Recurses through a directory to find *tests*.yaml files"""
@@ -459,9 +535,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                         if temp_dict['weight_class'] not in self.weight_classes_allowed_:
                             continue
                     # run script to create copy test file
-                    result = subprocess.run([copy_script,input_dir+test_name+'.i'],
-                                            stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE)
+                    result = self._runScript(
+                        [copy_script, input_dir + test_name + '.i']
+                    )
                     # check if subprocess ran correctly
                     if result.returncode != 0:
                         print(f"\033[31mWARNING: Error running copy script \"{copy_script}\"\033[0m")
@@ -536,9 +612,17 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
 
 
     def _getFilteredSelectedTests(self):
-        selected_names = set(self.selected_tests_)
+        selected_names = {
+            name.replace("\\", "/")
+            for name in self.selected_tests_
+        }
+
         dependency_names: set[str] = set()
-        queue = [test for test in self.tests_ if test.name_ in selected_names]
+        queue = [
+            test
+            for test in self.tests_
+            if test.name_ in selected_names
+        ]
 
         while queue:
             test = queue.pop()
@@ -546,7 +630,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
                 dep_name = dependency.getStringValue()
                 if dep_name in ("", '""'):
                     continue
+
                 dependency_names.add(dep_name)
+
                 for candidate in self.tests_:
                     candidate_name = candidate.name_.rsplit("/", 1)[-1]
                     if candidate_name == dep_name:
@@ -555,15 +641,20 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
         filtered_tests = []
         existing_names = {test.name_ for test in self.tests_}
         missing_tests = sorted(selected_names.difference(existing_names))
+
         for test in self.tests_:
             short_name = test.name_.rsplit("/", 1)[-1]
-            if test.name_ in selected_names or short_name in dependency_names:
+            if (
+                test.name_ in selected_names
+                or short_name in dependency_names
+            ):
                 filtered_tests.append(test)
 
         print("Selected test filter active:")
         print(f"  Requested tests          : {len(selected_names)}")
         print(f"  Including dependencies   : {len(dependency_names)}")
-        print(f"  Tests scheduled to run   : {len(self.tests_)}")
+        print(f"  Tests scheduled to run   : {len(filtered_tests)}")
+
         if missing_tests:
             print("  Requested tests not found:")
             for name in missing_tests:
@@ -649,6 +740,9 @@ class TFCTestSystem(TFCObject, TFCTraceabilityMatrix, TFCTestResultsDatabase):
             self.writeRequirementsTraceabilityMatrix()
         if self.generate_results_database_:
             self.writeResultsDatabase()
+        if self.rebuild_rtm_file_:
+            self.writeRequirementsTraceabilityMatrixFromResults(
+                self.rebuild_rtm_file_)
 
         # Printing failure logs
         failure_reasons: list[str] = []
