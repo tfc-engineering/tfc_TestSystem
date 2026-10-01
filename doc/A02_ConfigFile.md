@@ -3,6 +3,8 @@ The configuration file is a simple YAML formatted file read by `TFCTestSystem`.
 With this file, any of the test system input parameters can be overridden since
 it is processed after command line arguments are assigned. Additionally, it
 supports several other input options:
+  - `default_executable`, The executable to be used globally unless overridden
+    in local test specifications or by test objects themselves.
   - `print_width`, The maximum width of the test system message printing. This
     can be used to prevent line-wrapping when running the tests.
   - `default_args`, A set of arguments to be prepended to all tests' arguments.

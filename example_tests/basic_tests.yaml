@@ -1,0 +1,7 @@
+tutorial1:
+  executable: $PROJECT_ROOT/example_tests/test_exe.sh
+  args: ""
+  checks:
+    - type: ExitCodeCheck
+    - type: HasStringCheck
+      line_key: Hello world
